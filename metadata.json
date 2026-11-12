@@ -1,0 +1,6 @@
+{
+  "name": "PARASIGHT | Microscopic Image Analysis",
+  "description": "An AI-Based Microscopic Image Analysis System for Coproparasitological Parasite Detection and Research Evaluation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
