@@ -2586,69 +2586,6 @@ export default function App() {
                 <span>Exact duplicates detected</span>
                 <b className="mono">{duplicateImageCount.toLocaleString()}</b>
               </div>
-
-              <div
-                className="training-card"
-                style={{
-                  margin: '18px 0 8px',
-                  padding: 18,
-                  border: '1px solid #e7c4c4',
-                  borderRadius: 13,
-                  background: 'linear-gradient(120deg, #fff5f4, #f8e5e4)',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-end',
-                    gap: 12,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div>
-                    <div className="eyebrow">YOLO MODEL TRAINING & PREPARATION PROGRESS</div>
-                    <div
-                      className="mono"
-                      style={{ fontSize: 30, fontWeight: 800, color: '#710b14' }}
-                    >
-                      56%
-                    </div>
-                    <b>1,679 images processed</b>
-                  </div>
-                  <span className="badge">Phase B–C Progress Update</span>
-                </div>
-                <div
-                  style={{
-                    height: 12,
-                    background: '#ead2d0',
-                    borderRadius: 20,
-                    overflow: 'hidden',
-                    margin: '13px 0',
-                  }}
-                >
-                  <div
-                    style={{
-                      height: '100%',
-                      width: '56%',
-                      background: 'linear-gradient(90deg, #710b14, #c34c59)',
-                      borderRadius: 20,
-                    }}
-                  ></div>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: 12,
-                    color: '#805b5b',
-                  }}
-                >
-                  <span>0%</span>
-                  <b>56% reported progress · 70% Train / 30% Test YOLO format</b>
-                  <span>100%</span>
-                </div>
-              </div>
             </div>
 
             {/* Phase A: 8 Proposed Parasite Categories Table with Interactive Launch */}
