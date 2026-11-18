@@ -16,11 +16,10 @@ interface VercelResponseLike {
 }
 
 const GEMINI_VISION_MODELS = [
-  'gemini-4-hydrogen',
-  'gemini-3.1-flash-lite',
-  'gemini-flash-latest',
-  'gemini-3.8-flash',
   'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-4-hydrogen',
 ] as const;
 
 function getGenAIClient(): GoogleGenAI | null {

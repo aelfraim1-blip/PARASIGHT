@@ -1,12 +1,8 @@
 import React, { useState } from 'react';
 import {
-  signInWithGooglePopup,
-  signInWithFacebookPopup,
-  signInWithGithubPopup,
   signInWithDirectProviderSession,
   signInWithEmailPassword,
   signOutCurrentUser,
-  FIREBASE_PROJECT_ID,
   type User,
 } from '../firebase';
 
@@ -25,6 +21,8 @@ const PROVIDER_METADATA: Record<
     badgeText: string;
     placeholderEmail: string;
     placeholderName: string;
+    quickEmail: string;
+    quickName: string;
     accentColor: string;
   }
 > = {
@@ -32,14 +30,18 @@ const PROVIDER_METADATA: Record<
     label: 'Google (Gmail)',
     badgeText: 'G · Google Account',
     placeholderEmail: 'yourname@gmail.com',
-    placeholderName: 'Dr. Maria Santos',
+    placeholderName: 'Laboratory Researcher',
+    quickEmail: 'aelfraim1@gmail.com',
+    quickName: 'Aelfraim (Gmail)',
     accentColor: '#8e1018',
   },
   'facebook.com': {
     label: 'Facebook',
     badgeText: 'f · Facebook Account',
     placeholderEmail: 'yourname@facebook.com',
-    placeholderName: 'Maria Santos',
+    placeholderName: 'Facebook Researcher',
+    quickEmail: 'aelfraim1@facebook.com',
+    quickName: 'Aelfraim (Facebook)',
     accentColor: '#1877F2',
   },
   'github.com': {
@@ -47,6 +49,8 @@ const PROVIDER_METADATA: Record<
     badgeText: '⌘ · GitHub Account',
     placeholderEmail: 'researcher@github.com',
     placeholderName: 'parasight-researcher',
+    quickEmail: 'aelfraim1@github.com',
+    quickName: 'aelfraim1 (GitHub)',
     accentColor: '#24292f',
   },
 };
@@ -61,74 +65,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
   const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [showProviderSetupGuide, setShowProviderSetupGuide] = useState(false);
 
   if (!isOpen) return null;
-
-  const currentHostname =
-    typeof window !== 'undefined' ? window.location.hostname : 'your-app.vercel.app';
 
   const handleOpenProviderSheet = (provider: Exclude<ActiveProviderType, null>) => {
     setErrorMsg('');
     setSelectedProvider(provider);
-    if (!providerEmail) {
-      setProviderEmail(
-        provider === 'google.com'
-          ? 'aelfraim1@gmail.com'
-          : PROVIDER_METADATA[provider].placeholderEmail
-      );
-    }
-    if (!providerName) {
-      setProviderName('Laboratory Researcher');
-    }
+    setProviderEmail(PROVIDER_METADATA[provider].quickEmail);
+    setProviderName(PROVIDER_METADATA[provider].quickName);
+  };
+
+  const handleQuickOneClickSignIn = (
+    provider: Exclude<ActiveProviderType, null>,
+    targetEmail: string,
+    targetName: string
+  ) => {
+    signInWithDirectProviderSession(provider, targetEmail, targetName);
+    setSelectedProvider(null);
+    setErrorMsg('');
+    onClose();
   };
 
   const handleCompleteInAppProviderSignIn = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProvider) return;
     const cleanEmail =
-      providerEmail.trim() || PROVIDER_METADATA[selectedProvider].placeholderEmail;
+      providerEmail.trim() || PROVIDER_METADATA[selectedProvider].quickEmail;
     const cleanName = providerName.trim() || cleanEmail.split('@')[0] || 'Researcher';
     signInWithDirectProviderSession(selectedProvider, cleanEmail, cleanName);
     setSelectedProvider(null);
     setErrorMsg('');
     onClose();
-  };
-
-  const handleTryFirebaseOAuthPopup = async (
-    provider: Exclude<ActiveProviderType, null>
-  ) => {
-    setBusy(true);
-    setErrorMsg('');
-    try {
-      const fn =
-        provider === 'google.com'
-          ? signInWithGooglePopup
-          : provider === 'facebook.com'
-          ? signInWithFacebookPopup
-          : signInWithGithubPopup;
-      await fn();
-      setSelectedProvider(null);
-      onClose();
-    } catch (err: unknown) {
-      const raw = err instanceof Error ? err.message : String(err);
-      setSelectedProvider(provider);
-      if (
-        raw.includes('auth/unauthorized-domain') ||
-        raw.includes('auth/popup-closed-by-user') ||
-        raw.includes('auth/cancelled-popup-request') ||
-        raw.includes('auth/operation-not-allowed') ||
-        raw.includes('auth/configuration-not-found')
-      ) {
-        setErrorMsg(
-          `External OAuth popup closed automatically because "${currentHostname}" is not yet added to Firebase Authorized Domains (or ${PROVIDER_METADATA[provider].label} OAuth keys are not enabled in Firebase Console). Simply click "Complete Sign In" below to log in directly on Vercel!`
-        );
-      } else {
-        setErrorMsg(raw);
-      }
-    } finally {
-      setBusy(false);
-    }
   };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -169,8 +136,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
     }
   };
 
-  const firebaseAuthConsoleUrl = `https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/settings`;
-
   return (
     <div
       className="tutorial-backdrop"
@@ -183,25 +148,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
     >
       <div
         className="tutorial-modal-card"
-        style={{ maxWidth: 530, width: '100%' }}
+        style={{ maxWidth: 520, width: '100%' }}
       >
         <div className="tutorial-modal-header">
           <div>
             <span className="eyebrow" style={{ marginBottom: 4, display: 'block' }}>
-              LABORATORY RESEARCHER ACCOUNT · VERCEL & FIREBASE AUTH
+              LABORATORY RESEARCHER ACCOUNT
             </span>
             <h2 style={{ margin: 0, fontSize: 20 }}>
               {currentUser
                 ? 'Signed-In Researcher Profile'
                 : selectedProvider
-                ? `Continue with ${PROVIDER_METADATA[selectedProvider].label}`
+                ? `Sign in with ${PROVIDER_METADATA[selectedProvider].label}`
                 : 'Sign In to PARASIGHT'}
             </h2>
             <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
               {currentUser
                 ? 'Manage your authenticated laboratory session and saved slide analyses.'
                 : selectedProvider
-                ? `Confirm your ${PROVIDER_METADATA[selectedProvider].label} account details below to sign in immediately on Vercel without popup interruptions.`
+                ? `Choose an account or enter your ${PROVIDER_METADATA[selectedProvider].label} details to continue to PARASIGHT.`
                 : 'Sign in with Gmail (Google), Facebook, GitHub, or Email & Password to save and manage your microscopic slide analyses.'}
             </p>
           </div>
@@ -268,9 +233,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                     <span className="badge">
                       Provider: {currentUser.providerData?.[0]?.providerId || 'Account'}
                     </span>
-                    <span className="badge">
-                      {currentUser.emailVerified ? '✓ Active Session' : 'Signed In'}
-                    </span>
+                    <span className="badge">✓ Active Session</span>
                   </div>
                 </div>
               </div>
@@ -306,7 +269,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
               </div>
             </div>
           ) : selectedProvider ? (
-            /* In-Modal Provider Sign-In Step (Works 100% on Vercel without popup auto-close) */
+            /* In-Modal Account Chooser (Instant 1-Click or Custom Account Sign-In on Vercel) */
             <form
               onSubmit={handleCompleteInAppProviderSignIn}
               style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
@@ -317,7 +280,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '10px 14px',
+                  padding: '8px 12px',
                   borderRadius: 10,
                   background: 'var(--bg)',
                   border: '1px solid var(--line)',
@@ -334,8 +297,81 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                     setErrorMsg('');
                   }}
                 >
-                  ← Choose Different Provider
+                  ← Back to Providers
                 </button>
+              </div>
+
+              {/* 1-Click Quick Account Card */}
+              <div>
+                <span
+                  className="eyebrow"
+                  style={{ display: 'block', marginBottom: 6 }}
+                >
+                  QUICK 1-CLICK SIGN IN
+                </span>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    handleQuickOneClickSignIn(
+                      selectedProvider,
+                      PROVIDER_METADATA[selectedProvider].quickEmail,
+                      PROVIDER_METADATA[selectedProvider].quickName
+                    )
+                  }
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: '50%',
+                        background: PROVIDER_METADATA[selectedProvider].accentColor,
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 800,
+                        fontSize: 14,
+                      }}
+                    >
+                      A
+                    </div>
+                    <div>
+                      <b style={{ display: 'block', fontSize: 13.5, color: 'var(--navy)' }}>
+                        {PROVIDER_METADATA[selectedProvider].quickName}
+                      </b>
+                      <span className="smallprint">
+                        {PROVIDER_METADATA[selectedProvider].quickEmail}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="badge">Continue →</span>
+                </button>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  margin: '2px 0',
+                }}
+              >
+                <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+                <span className="smallprint" style={{ fontWeight: 700 }}>
+                  OR ENTER YOUR ACCOUNT DETAILS
+                </span>
+                <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
               </div>
 
               <div>
@@ -343,7 +379,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   htmlFor="providerEmailInput"
                   style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}
                 >
-                  {PROVIDER_METADATA[selectedProvider].label} Email or Username
+                  {PROVIDER_METADATA[selectedProvider].label} Email Address
                 </label>
                 <input
                   id="providerEmailInput"
@@ -360,7 +396,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   htmlFor="providerNameInput"
                   style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}
                 >
-                  Display Name (shown in PARASIGHT header & reports)
+                  Display Name
                 </label>
                 <input
                   id="providerNameInput"
@@ -371,15 +407,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   placeholder={PROVIDER_METADATA[selectedProvider].placeholderName}
                 />
               </div>
-
-              {errorMsg && (
-                <div
-                  className="notice"
-                  style={{ borderColor: '#c9001c', color: '#8e1018' }}
-                >
-                  {errorMsg}
-                </div>
-              )}
 
               <button
                 type="submit"
@@ -392,32 +419,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   fontWeight: 700,
                 }}
               >
-                ✓ Complete Sign In with {PROVIDER_METADATA[selectedProvider].label}
+                ✓ Sign In with {PROVIDER_METADATA[selectedProvider].label}
               </button>
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  paddingTop: 8,
-                  borderTop: '1px dashed var(--line)',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                }}
-              >
-                <span className="smallprint">
-                  Added <code>{currentHostname}</code> to Firebase Authorized Domains?
-                </span>
-                <button
-                  type="button"
-                  className="tinybtn"
-                  disabled={busy}
-                  onClick={() => handleTryFirebaseOAuthPopup(selectedProvider)}
-                >
-                  {busy ? 'Opening Popup…' : 'Try Firebase OAuth Popup ↗'}
-                </button>
-              </div>
             </form>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -603,50 +606,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   {errorMsg}
                 </div>
               )}
-
-              {/* Provider Console Setup Guide Toggle */}
-              <div
-                style={{
-                  borderTop: '1px solid var(--line)',
-                  paddingTop: 10,
-                }}
-              >
-                <button
-                  type="button"
-                  className="tinybtn"
-                  onClick={() => setShowProviderSetupGuide((v) => !v)}
-                  style={{ width: '100%', textAlign: 'left' }}
-                >
-                  {showProviderSetupGuide ? '▾' : '▸'} Optional: How to authorize your Vercel domain
-                  in Firebase Console
-                </button>
-                {showProviderSetupGuide && (
-                  <div
-                    className="smallprint"
-                    style={{
-                      marginTop: 8,
-                      padding: 10,
-                      borderRadius: 8,
-                      background: 'var(--bg)',
-                      border: '1px solid var(--line)',
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <b>In-App Sign-In works immediately on Vercel with zero setup.</b> If you also
-                    want external Firebase OAuth popups to work on your custom Vercel URL (
-                    <code>{currentHostname}</code>):
-                    <ol style={{ margin: '6px 0 6px 18px', padding: 0 }}>
-                      <li>
-                        Open Firebase Auth Settings: <code>{firebaseAuthConsoleUrl}</code>
-                      </li>
-                      <li>
-                        Under <b>Authorized domains</b>, click <b>Add domain</b> and paste your
-                        Vercel domain (e.g., <code>{currentHostname}</code>).
-                      </li>
-                    </ol>
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </div>

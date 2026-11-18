@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 interface VercelRequestLike {
   method?: string;
@@ -15,12 +15,12 @@ interface VercelResponseLike {
   end?: (chunk?: string) => void;
 }
 
+// Ordered so the fastest public & AI Studio Flash models succeed on the VERY FIRST request without 404 retry delays
 const GEMINI_CHAT_MODELS = [
-  'gemini-4-hydrogen',
-  'gemini-3.1-flash-lite',
-  'gemini-3.8-flash',
-  'gemini-flash-latest',
   'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-4-hydrogen',
 ] as const;
 
 function sendJson(res: VercelResponseLike, statusCode: number, data: unknown) {
@@ -127,41 +127,31 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       },
     });
 
-    const systemInstruction = `You are the PARASIGHT Gemini AI Assistant, an expert clinical coproparasitology and computer-vision research copilot built for the study "PARASIGHT: An AI-Based Microscopic Image Analysis System For Coproparasitological Parasite Detection" (Researchers: Berdejo, Cabayao, Malaque, Tanucan, & Tayson, November 2026).
+    const compactSlideInfo = slideContext
+      ? `Active Slide: ${JSON.stringify(slideContext)}`
+      : 'Active Slide: None currently loaded.';
 
-Your knowledge covers:
-1. The 8 Target Intestinal Parasites (Classes 0–7) & Associated Clinical Illnesses:
-   - Class 0: Ascaris lumbricoides (Helminth, 45–75 × 35–50 μm, broad oval fertilized/unfertilized egg with bumpy mammillated albuminous coat; Possible Illness: Ascariasis / Intestinal Roundworm Infection).
-   - Class 1: Trichuris trichiura (Helminth, 50–55 × 22–24 μm, lemon/barrel-shaped egg with 2 refractile bipolar hyaline plugs; Possible Illness: Trichuriasis / Human Whipworm Infection).
-   - Class 2: Ancylostoma / Hookworm (Helminth, 55–75 × 35–40 μm, thin colorless hyaline shell with 4–8 blastomere morula; Possible Illness: Ancylostomiasis / Hookworm Disease & iron-deficiency anemia).
-   - Class 3: Enterobius vermicularis (Helminth, 50–60 × 20–30 μm, elongated asymmetrical D-shaped egg flattened on one side; Possible Illness: Enterobiasis / Pinworm Infection).
-   - Class 4: Taenia spp. (Helminth, 30–43 μm spherical egg with thick dark-brown radially striated embryophore and 6-hooked oncosphere; Possible Illness: Taeniasis & potential Cysticercosis for T. solium).
-   - Class 5: Giardia intestinalis (Protozoan, 8–19 × 7–10 μm oval cyst with 2–4 nuclei, longitudinal axonemes, and median bodies; Possible Illness: Giardiasis / Flagellate Protozoan Enteritis).
-   - Class 6: Entamoeba histolytica (Pathogenic Protozoan, 10–20 μm spherical cyst with 1–4 nuclei, central karyosomes, and blunt cigar-shaped chromatoid bodies; Possible Illness: Amoebiasis / Amoebic Colitis / Amoebic Dysentery & Amoebic Liver Abscess).
-   - Class 7: Entamoeba coli (Commensal Protozoan, 10–35 μm spherical cyst with 5–8 nuclei, eccentric karyosomes, and splintered chromatoid bars; Possible Condition: Non-Pathogenic Commensal Colonization indicating fecal-oral exposure).
+    const systemInstruction = `You are the PARASIGHT Gemini AI Assistant for "PARASIGHT: An AI-Based Microscopic Image Analysis System For Coproparasitological Parasite Detection".
+8 Target Parasites (Classes 0-7) & Associated Illnesses:
+- C0 Ascaris lumbricoides: Helminth egg (45-75×35-50μm), oval with bumpy mammillated coat. Illness: Ascariasis.
+- C1 Trichuris trichiura: Helminth egg (50-55×22-24μm), barrel-shaped with 2 bipolar hyaline plugs. Illness: Trichuriasis.
+- C2 Ancylostoma (Hookworm): Helminth ovum (55-75×35-40μm), thin hyaline shell with 4-8 cell morula. Illness: Ancylostomiasis / Hookworm anemia.
+- C3 Enterobius vermicularis: Helminth egg (50-60×20-30μm), flattened D-shape. Illness: Enterobiasis (Pinworm).
+- C4 Taenia spp.: Helminth egg (30-43μm), spherical with thick dark radially striated embryophore. Illness: Taeniasis / Cysticercosis.
+- C5 Giardia intestinalis: Protozoan cyst (8-19×7-10μm), oval with 2-4 nuclei & axonemes. Illness: Giardiasis.
+- C6 Entamoeba histolytica: Pathogenic protozoan cyst (10-20μm), 1-4 nuclei, central karyosome, blunt cigar chromatoid bars. Illness: Amoebiasis / Amoebic dysentery.
+- C7 Entamoeba coli: Commensal protozoan cyst (10-35μm), 5-8 nuclei, eccentric karyosome, splintered chromatoid bars. Condition: Non-pathogenic commensal colonization.
+Methodology: Phase B 70/30 YOLO train/test split; Precision=TP/(TP+FP), Recall=TP/(TP+FN), F1=2PR/(P+R), Time Reduction=((Manual-PARASIGHT)/Manual)*100.
+${compactSlideInfo}
+Keep answers fast, concise, and clear (2-5 short bullet points or 1-2 brief paragraphs unless asked for more).`;
 
-2. Research Plan Methodology (Phases A–G & Objectives 1–7):
-   - Phase B: 70% Training / 30% Testing split with normalized YOLO annotations (<class_id> <x_center> <y_center> <width> <height>) and SHA-256 duplicate prevention.
-   - Objective 4 Formulas: Precision = TP/(TP+FP), Recall = TP/(TP+FN), F1 = 2*(Precision*Recall)/(Precision+Recall), Overall Accuracy = Correct/Total, Per-Class Accuracy = Correct_i/Total_i.
-   - Objective 5 Optical Conditions: (A) Image Clarity (Laplacian focus variance), (B) Illumination (grayscale brightness), (C) Presence of Fecal Debris.
-   - Objective 6 Time Efficiency: Time Reduction (%) = ((Manual Time - PARASIGHT Time) / Manual Time) * 100.
-   - Objective 7 Error Analysis: Error Frequency (%) = (Specific Error Count / Total Errors) * 100.
-
-3. Live Active Microscope Slide Context:
-${slideContext ? JSON.stringify(slideContext, null, 2) : 'No slide is currently loaded in the Analyze stage.'}
-
-Guidelines:
-- Answer clearly, accurately, and concisely in a helpful scientific & educational tone.
-- Use short bullet points where helpful.
-- Remind users when appropriate that PARASIGHT is a research and decision-support tool for laboratory personnel and does not replace professional clinical diagnosis (WHO, 2021).`;
-
-    const recentHistory = history.slice(-8) as Array<{ who?: string; text?: string }>;
+    const recentHistory = history.slice(-4) as Array<{ who?: string; text?: string }>;
     const historyTranscript = recentHistory
-      .map((m) => `${m.who === 'user' ? 'User' : 'PARASIGHT AI'}: ${m.text || ''}`)
-      .join('\n\n');
+      .map((m) => `${m.who === 'user' ? 'User' : 'AI'}: ${m.text || ''}`)
+      .join('\n');
 
     const userPrompt = historyTranscript
-      ? `Previous conversation:\n${historyTranscript}\n\nCurrent User Question: ${message}`
+      ? `${historyTranscript}\nUser: ${message}`
       : message;
 
     const parts: Array<
@@ -187,11 +177,19 @@ Guidelines:
     let lastErrorMsg = '';
     for (const modelName of GEMINI_CHAT_MODELS) {
       try {
+        // Disable thinking budget on 2.5-flash/flash-latest or use LOW thinking level on Gemini 3/4 for sub-second response latency
+        const isGemini3Or4 =
+          modelName.startsWith('gemini-3') || modelName.startsWith('gemini-4');
+        const thinkingConfig = isGemini3Or4
+          ? { thinkingLevel: ThinkingLevel.LOW }
+          : { thinkingBudget: 0 };
+
         const response = await ai.models.generateContent({
           model: modelName,
           contents: { parts },
           config: {
             systemInstruction,
+            thinkingConfig,
           },
         });
 
