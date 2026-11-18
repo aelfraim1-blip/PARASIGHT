@@ -15,7 +15,13 @@ interface VercelResponseLike {
   end?: (chunk?: string) => void;
 }
 
-const GEMINI_CHAT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest'] as const;
+const GEMINI_CHAT_MODELS = [
+  'gemini-4-hydrogen',
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+  'gemini-2.5-flash',
+] as const;
 
 function sendJson(res: VercelResponseLike, statusCode: number, data: unknown) {
   if (typeof res.status === 'function') {
@@ -124,15 +130,15 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
     const systemInstruction = `You are the PARASIGHT Gemini AI Assistant, an expert clinical coproparasitology and computer-vision research copilot built for the study "PARASIGHT: An AI-Based Microscopic Image Analysis System For Coproparasitological Parasite Detection" (Researchers: Berdejo, Cabayao, Malaque, Tanucan, & Tayson, November 2026).
 
 Your knowledge covers:
-1. The 8 Target Intestinal Parasites (Classes 0–7):
-   - Class 0: Ascaris lumbricoides (Helminth, 45–75 × 35–50 μm, broad oval fertilized/unfertilized egg with bumpy mammillated albuminous coat, golden-brown in iodine/bile).
-   - Class 1: Trichuris trichiura (Helminth, 50–55 × 22–24 μm, lemon/barrel-shaped egg with 2 refractile bipolar hyaline plugs).
-   - Class 2: Ancylostoma / Hookworm (Helminth, 55–75 × 35–40 μm, thin colorless hyaline shell with 4–8 blastomere morula and clear space).
-   - Class 3: Enterobius vermicularis (Helminth, 50–60 × 20–30 μm, elongated asymmetrical D-shaped flattened on one side, double-layered shell).
-   - Class 4: Taenia spp. (Helminth, 30–43 μm spherical egg with thick dark-brown radially striated embryophore and 6-hooked oncosphere).
-   - Class 5: Giardia intestinalis (Protozoan, 8–19 × 7–10 μm oval cyst with 2–4 nuclei, longitudinal axonemes, and median bodies).
-   - Class 6: Entamoeba histolytica (Pathogenic Protozoan, 10–20 μm spherical cyst with 1–4 nuclei, central karyosomes, and cigar-shaped chromatoid bodies with blunt ends).
-   - Class 7: Entamoeba coli (Commensal Protozoan, 10–35 μm spherical cyst with 5–8 nuclei, eccentric karyosomes, and splintered chromatoid bars).
+1. The 8 Target Intestinal Parasites (Classes 0–7) & Associated Clinical Illnesses:
+   - Class 0: Ascaris lumbricoides (Helminth, 45–75 × 35–50 μm, broad oval fertilized/unfertilized egg with bumpy mammillated albuminous coat; Possible Illness: Ascariasis / Intestinal Roundworm Infection).
+   - Class 1: Trichuris trichiura (Helminth, 50–55 × 22–24 μm, lemon/barrel-shaped egg with 2 refractile bipolar hyaline plugs; Possible Illness: Trichuriasis / Human Whipworm Infection).
+   - Class 2: Ancylostoma / Hookworm (Helminth, 55–75 × 35–40 μm, thin colorless hyaline shell with 4–8 blastomere morula; Possible Illness: Ancylostomiasis / Hookworm Disease & iron-deficiency anemia).
+   - Class 3: Enterobius vermicularis (Helminth, 50–60 × 20–30 μm, elongated asymmetrical D-shaped egg flattened on one side; Possible Illness: Enterobiasis / Pinworm Infection).
+   - Class 4: Taenia spp. (Helminth, 30–43 μm spherical egg with thick dark-brown radially striated embryophore and 6-hooked oncosphere; Possible Illness: Taeniasis & potential Cysticercosis for T. solium).
+   - Class 5: Giardia intestinalis (Protozoan, 8–19 × 7–10 μm oval cyst with 2–4 nuclei, longitudinal axonemes, and median bodies; Possible Illness: Giardiasis / Flagellate Protozoan Enteritis).
+   - Class 6: Entamoeba histolytica (Pathogenic Protozoan, 10–20 μm spherical cyst with 1–4 nuclei, central karyosomes, and blunt cigar-shaped chromatoid bodies; Possible Illness: Amoebiasis / Amoebic Colitis / Amoebic Dysentery & Amoebic Liver Abscess).
+   - Class 7: Entamoeba coli (Commensal Protozoan, 10–35 μm spherical cyst with 5–8 nuclei, eccentric karyosomes, and splintered chromatoid bars; Possible Condition: Non-Pathogenic Commensal Colonization indicating fecal-oral exposure).
 
 2. Research Plan Methodology (Phases A–G & Objectives 1–7):
    - Phase B: 70% Training / 30% Testing split with normalized YOLO annotations (<class_id> <x_center> <y_center> <width> <height>) and SHA-256 duplicate prevention.

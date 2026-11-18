@@ -15,7 +15,13 @@ interface VercelResponseLike {
   end?: (chunk?: string) => void;
 }
 
-const GEMINI_VISION_MODELS = ['gemini-flash-latest', 'gemini-3.8-flash'] as const;
+const GEMINI_VISION_MODELS = [
+  'gemini-4-hydrogen',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-latest',
+  'gemini-3.8-flash',
+  'gemini-2.5-flash',
+] as const;
 
 function getGenAIClient(): GoogleGenAI | null {
   const rawKey =
@@ -30,6 +36,11 @@ function getGenAIClient(): GoogleGenAI | null {
   }
   return new GoogleGenAI({
     apiKey: key,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
   });
 }
 

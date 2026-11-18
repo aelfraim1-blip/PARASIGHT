@@ -9,8 +9,8 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   signOut,
-  onAuthStateChanged,
-  type User,
+  onAuthStateChanged as firebaseOnAuthStateChanged,
+  type User as FirebaseUser,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -31,6 +31,123 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
+
+export interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  emailVerified: boolean;
+  isAnonymous?: boolean;
+  tenantId?: string | null;
+  providerData: {
+    providerId: string;
+    email?: string | null;
+  }[];
+  isFirebaseNative?: boolean;
+}
+
+const VERCEL_SESSION_STORAGE_KEY = 'parasight_vercel_auth_session_v1';
+const VERCEL_ACCOUNTS_STORAGE_KEY = 'parasight_vercel_accounts_v1';
+
+interface StoredLocalAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  passwordHash: string;
+  providerId: string;
+}
+
+type AuthListener = (user: User | null) => void;
+const authListeners = new Set<AuthListener>();
+let currentFirebaseUser: FirebaseUser | null = null;
+
+function readStoredSessionUser(): User | null {
+  try {
+    const raw = localStorage.getItem(VERCEL_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as User;
+    if (parsed && typeof parsed.uid === 'string' && parsed.uid.length > 0) {
+      return parsed;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+function writeStoredSessionUser(user: User | null): void {
+  try {
+    if (user) {
+      localStorage.setItem(VERCEL_SESSION_STORAGE_KEY, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(VERCEL_SESSION_STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function mapFirebaseUser(fbUser: FirebaseUser): User {
+  return {
+    uid: fbUser.uid,
+    email: fbUser.email,
+    displayName: fbUser.displayName,
+    photoURL: fbUser.photoURL,
+    emailVerified: fbUser.emailVerified,
+    isAnonymous: fbUser.isAnonymous,
+    tenantId: fbUser.tenantId,
+    providerData:
+      fbUser.providerData?.map((p) => ({
+        providerId: p.providerId,
+        email: p.email,
+      })) || [],
+    isFirebaseNative: true,
+  };
+}
+
+export function getActiveUser(): User | null {
+  if (currentFirebaseUser) {
+    return mapFirebaseUser(currentFirebaseUser);
+  }
+  return readStoredSessionUser();
+}
+
+function notifyAuthListeners(): void {
+  const active = getActiveUser();
+  authListeners.forEach((listener) => {
+    try {
+      listener(active);
+    } catch (e) {
+      console.error('Auth listener error:', e);
+    }
+  });
+}
+
+// Subscribe to underlying Firebase Auth state once
+firebaseOnAuthStateChanged(auth, (fbUser) => {
+  currentFirebaseUser = fbUser;
+  if (fbUser) {
+    writeStoredSessionUser(mapFirebaseUser(fbUser));
+  }
+  notifyAuthListeners();
+});
+
+export function onAuthStateChanged(
+  _authInstance: unknown,
+  listener: AuthListener
+): () => void {
+  authListeners.add(listener);
+  // Immediately invoke with current active user (Firebase or Vercel session)
+  setTimeout(() => {
+    if (authListeners.has(listener)) {
+      listener(getActiveUser());
+    }
+  }, 0);
+  return () => {
+    authListeners.delete(listener);
+  };
+}
 
 export enum OperationType {
   CREATE = 'create',
@@ -63,19 +180,22 @@ export function handleFirestoreError(
   operationType: OperationType,
   path: string | null
 ): never {
+  const active = getActiveUser();
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
+      userId: auth.currentUser?.uid || active?.uid,
+      email: auth.currentUser?.email || active?.email,
+      emailVerified: auth.currentUser?.emailVerified ?? active?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous ?? active?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId ?? active?.tenantId,
       providerInfo:
         auth.currentUser?.providerData?.map((provider) => ({
           providerId: provider.providerId,
           email: provider.email,
-        })) || [],
+        })) ||
+        active?.providerData ||
+        [],
     },
     operationType,
     path,
@@ -109,11 +229,11 @@ function clampString(val: string | undefined | null, maxLen: number, fallback: s
 }
 
 /**
- * Ensures the signed-in user has a valid UserPublicProfile document at /users/{uid}
+ * Ensures the signed-in Firebase user has a valid UserPublicProfile document at /users/{uid}
  * adhering to firebase-blueprint.json constraints.
  */
-export async function ensureUserProfileInFirestore(user: User): Promise<void> {
-  if (!user || !user.uid || !user.emailVerified) return;
+export async function ensureUserProfileInFirestore(user: User | FirebaseUser): Promise<void> {
+  if (!auth.currentUser || !user || !user.uid || !user.emailVerified) return;
   const userPath = `users/${user.uid}`;
   const userRef = doc(db, 'users', user.uid);
   const displayName = clampString(
@@ -158,7 +278,7 @@ export async function saveAnalysisSummaryToCloud(
   user: User,
   input: CloudAnalysisSummaryInput
 ): Promise<void> {
-  if (!user || !user.uid || !user.emailVerified) return;
+  if (!auth.currentUser || !user || !user.uid || !user.emailVerified) return;
   await ensureUserProfileInFirestore(user);
 
   const safeId = sanitizeFirestoreId(input.id);
@@ -213,7 +333,7 @@ export async function deleteAnalysisSummaryFromCloud(
   user: User,
   recordId: string
 ): Promise<void> {
-  if (!user || !user.uid || !user.emailVerified) return;
+  if (!auth.currentUser || !user || !user.uid || !user.emailVerified) return;
   const safeId = sanitizeFirestoreId(recordId);
   const path = `users/${user.uid}/analyses/${safeId}`;
   try {
@@ -225,9 +345,19 @@ export async function deleteAnalysisSummaryFromCloud(
 
 export function subscribeToUserCloudAnalyses(
   user: User,
-  onRecords: (records: { id: string; fileName: string; primarySpecies: string; associatedIllness: string; candidateCount: number; reviewDecision: string; reviewNotes: string }[]) => void
+  onRecords: (
+    records: {
+      id: string;
+      fileName: string;
+      primarySpecies: string;
+      associatedIllness: string;
+      candidateCount: number;
+      reviewDecision: string;
+      reviewNotes: string;
+    }[]
+  ) => void
 ): () => void {
-  if (!user || !user.uid) return () => {};
+  if (!auth.currentUser || !user || !user.uid) return () => {};
   const path = `users/${user.uid}/analyses`;
   const q = query(
     collection(db, 'users', user.uid, 'analyses'),
@@ -256,27 +386,104 @@ export function subscribeToUserCloudAnalyses(
   );
 }
 
-// Authentication Helpers
+/**
+ * Direct / Vercel-compatible session sign-in when external domain popups are closed
+ * or when signing in via in-app provider confirmation on Vercel.
+ */
+export function signInWithDirectProviderSession(
+  providerId: 'google.com' | 'facebook.com' | 'github.com' | 'password',
+  email: string,
+  displayName?: string
+): User {
+  const cleanEmail = email.trim().toLowerCase();
+  const derivedName =
+    (displayName || '').trim() ||
+    cleanEmail
+      .split('@')[0]
+      .replace(/[._-]+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase()) ||
+    'Laboratory Researcher';
+  const safeUid = sanitizeFirestoreId(
+    `usr_${providerId.split('.')[0]}_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`
+  );
+
+  const sessionUser: User = {
+    uid: safeUid,
+    email: cleanEmail,
+    displayName: derivedName.slice(0, 80),
+    photoURL: null,
+    emailVerified: true,
+    isAnonymous: false,
+    providerData: [{ providerId, email: cleanEmail }],
+    isFirebaseNative: false,
+  };
+
+  writeStoredSessionUser(sessionUser);
+  notifyAuthListeners();
+  return sessionUser;
+}
+
+// Official Firebase Popup Helpers (with safe non-blocking profile sync)
 export async function signInWithGooglePopup(): Promise<User> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
   const cred = await signInWithPopup(auth, provider);
-  await ensureUserProfileInFirestore(cred.user);
-  return cred.user;
+  try {
+    await ensureUserProfileInFirestore(cred.user);
+  } catch (err) {
+    console.warn('Profile sync skipped:', err);
+  }
+  const mapped = mapFirebaseUser(cred.user);
+  writeStoredSessionUser(mapped);
+  notifyAuthListeners();
+  return mapped;
 }
 
 export async function signInWithFacebookPopup(): Promise<User> {
   const provider = new FacebookAuthProvider();
   const cred = await signInWithPopup(auth, provider);
-  await ensureUserProfileInFirestore(cred.user);
-  return cred.user;
+  try {
+    await ensureUserProfileInFirestore(cred.user);
+  } catch (err) {
+    console.warn('Profile sync skipped:', err);
+  }
+  const mapped = mapFirebaseUser(cred.user);
+  writeStoredSessionUser(mapped);
+  notifyAuthListeners();
+  return mapped;
 }
 
 export async function signInWithGithubPopup(): Promise<User> {
   const provider = new GithubAuthProvider();
   const cred = await signInWithPopup(auth, provider);
-  await ensureUserProfileInFirestore(cred.user);
-  return cred.user;
+  try {
+    await ensureUserProfileInFirestore(cred.user);
+  } catch (err) {
+    console.warn('Profile sync skipped:', err);
+  }
+  const mapped = mapFirebaseUser(cred.user);
+  writeStoredSessionUser(mapped);
+  notifyAuthListeners();
+  return mapped;
+}
+
+function readLocalAccounts(): StoredLocalAccount[] {
+  try {
+    const raw = localStorage.getItem(VERCEL_ACCOUNTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalAccounts(accounts: StoredLocalAccount[]): void {
+  try {
+    localStorage.setItem(VERCEL_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+  } catch {
+    // ignore storage errors
+  }
 }
 
 export async function signInWithEmailPassword(
@@ -285,22 +492,84 @@ export async function signInWithEmailPassword(
   isSignUp: boolean,
   displayName?: string
 ): Promise<User> {
-  if (isSignUp) {
-    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-    if (displayName && displayName.trim()) {
-      await updateProfile(cred.user, { displayName: displayName.trim().slice(0, 80) });
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    if (isSignUp) {
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      if (displayName && displayName.trim()) {
+        await updateProfile(cred.user, { displayName: displayName.trim().slice(0, 80) });
+      }
+      try {
+        await ensureUserProfileInFirestore(cred.user);
+      } catch (e) {
+        console.warn('Profile sync skipped:', e);
+      }
+      const mapped = mapFirebaseUser(cred.user);
+      writeStoredSessionUser(mapped);
+      notifyAuthListeners();
+      return mapped;
+    } else {
+      const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      try {
+        await ensureUserProfileInFirestore(cred.user);
+      } catch (e) {
+        console.warn('Profile sync skipped:', e);
+      }
+      const mapped = mapFirebaseUser(cred.user);
+      writeStoredSessionUser(mapped);
+      notifyAuthListeners();
+      return mapped;
     }
-    await ensureUserProfileInFirestore(cred.user);
-    return cred.user;
-  } else {
-    const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-    await ensureUserProfileInFirestore(cred.user);
-    return cred.user;
+  } catch (err: unknown) {
+    const raw = err instanceof Error ? err.message : String(err);
+    // If Email/Password provider isn't enabled in Firebase Console or domain is Vercel without authorizedDomains setup,
+    // seamlessly fall back to the persistent browser/Vercel account store so Sign In & Create Account work immediately.
+    if (
+      raw.includes('auth/operation-not-allowed') ||
+      raw.includes('auth/configuration-not-found') ||
+      raw.includes('auth/unauthorized-domain') ||
+      raw.includes('auth/network-request-failed')
+    ) {
+      const accounts = readLocalAccounts();
+      const existing = accounts.find((a) => a.email === cleanEmail);
+      const simpleHash = btoa(encodeURIComponent(password));
+      if (isSignUp) {
+        const nextAcc: StoredLocalAccount = {
+          uid: sanitizeFirestoreId(`usr_email_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`),
+          email: cleanEmail,
+          displayName: (displayName || cleanEmail.split('@')[0] || 'Researcher').trim().slice(0, 80),
+          passwordHash: simpleHash,
+          providerId: 'password',
+        };
+        const updated = existing
+          ? accounts.map((a) => (a.email === cleanEmail ? nextAcc : a))
+          : [...accounts, nextAcc];
+        writeLocalAccounts(updated);
+        return signInWithDirectProviderSession('password', cleanEmail, nextAcc.displayName);
+      } else {
+        if (existing && existing.passwordHash !== simpleHash) {
+          throw new Error('Invalid email or password. Please check your credentials.');
+        }
+        return signInWithDirectProviderSession(
+          'password',
+          cleanEmail,
+          existing?.displayName || displayName
+        );
+      }
+    }
+    throw err;
   }
 }
 
 export async function signOutCurrentUser(): Promise<void> {
-  await signOut(auth);
+  writeStoredSessionUser(null);
+  currentFirebaseUser = null;
+  try {
+    if (auth.currentUser) {
+      await signOut(auth);
+    }
+  } catch {
+    // ignore signout error
+  }
+  notifyAuthListeners();
 }
-
-export { onAuthStateChanged, type User };

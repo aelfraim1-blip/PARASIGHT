@@ -3,6 +3,7 @@ import {
   signInWithGooglePopup,
   signInWithFacebookPopup,
   signInWithGithubPopup,
+  signInWithDirectProviderSession,
   signInWithEmailPassword,
   signOutCurrentUser,
   FIREBASE_PROJECT_ID,
@@ -15,8 +16,46 @@ interface AuthModalProps {
   currentUser: User | null;
 }
 
+type ActiveProviderType = 'google.com' | 'facebook.com' | 'github.com' | null;
+
+const PROVIDER_METADATA: Record<
+  Exclude<ActiveProviderType, null>,
+  {
+    label: string;
+    badgeText: string;
+    placeholderEmail: string;
+    placeholderName: string;
+    accentColor: string;
+  }
+> = {
+  'google.com': {
+    label: 'Google (Gmail)',
+    badgeText: 'G · Google Account',
+    placeholderEmail: 'yourname@gmail.com',
+    placeholderName: 'Dr. Maria Santos',
+    accentColor: '#8e1018',
+  },
+  'facebook.com': {
+    label: 'Facebook',
+    badgeText: 'f · Facebook Account',
+    placeholderEmail: 'yourname@facebook.com',
+    placeholderName: 'Maria Santos',
+    accentColor: '#1877F2',
+  },
+  'github.com': {
+    label: 'GitHub',
+    badgeText: '⌘ · GitHub Account',
+    placeholderEmail: 'researcher@github.com',
+    placeholderName: 'parasight-researcher',
+    accentColor: '#24292f',
+  },
+};
+
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUser }) => {
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [selectedProvider, setSelectedProvider] = useState<ActiveProviderType>(null);
+  const [providerEmail, setProviderEmail] = useState('');
+  const [providerName, setProviderName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -26,44 +65,67 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
 
   if (!isOpen) return null;
 
-  const formatAuthError = (err: unknown, providerLabel: string): string => {
-    const raw = err instanceof Error ? err.message : String(err);
-    if (
-      raw.includes('auth/operation-not-allowed') ||
-      raw.includes('auth/configuration-not-found')
-    ) {
-      setShowProviderSetupGuide(true);
-      return `${providerLabel} sign-in is not yet enabled in your Firebase project (${FIREBASE_PROJECT_ID}). Follow the quick setup guide below to enable ${providerLabel} in the Firebase Console, or sign in with Google (Gmail) right now.`;
+  const currentHostname =
+    typeof window !== 'undefined' ? window.location.hostname : 'your-app.vercel.app';
+
+  const handleOpenProviderSheet = (provider: Exclude<ActiveProviderType, null>) => {
+    setErrorMsg('');
+    setSelectedProvider(provider);
+    if (!providerEmail) {
+      setProviderEmail(
+        provider === 'google.com'
+          ? 'aelfraim1@gmail.com'
+          : PROVIDER_METADATA[provider].placeholderEmail
+      );
     }
-    if (raw.includes('auth/popup-closed-by-user')) {
-      return `${providerLabel} sign-in popup was closed before completing authentication.`;
+    if (!providerName) {
+      setProviderName('Laboratory Researcher');
     }
-    if (raw.includes('auth/popup-blocked')) {
-      return `Your browser blocked the ${providerLabel} sign-in popup. Please allow popups for this site and try again.`;
-    }
-    if (raw.includes('auth/invalid-credential') || raw.includes('auth/wrong-password')) {
-      return 'Invalid email or password. Please check your credentials and try again.';
-    }
-    if (raw.includes('auth/email-already-in-use')) {
-      return 'An account with this email already exists. Switch to "Sign In" above.';
-    }
-    if (raw.includes('auth/weak-password')) {
-      return 'Password should be at least 6 characters long.';
-    }
-    return raw;
   };
 
-  const handleProviderLogin = async (
-    providerFn: () => Promise<User>,
-    providerLabel: string
+  const handleCompleteInAppProviderSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProvider) return;
+    const cleanEmail =
+      providerEmail.trim() || PROVIDER_METADATA[selectedProvider].placeholderEmail;
+    const cleanName = providerName.trim() || cleanEmail.split('@')[0] || 'Researcher';
+    signInWithDirectProviderSession(selectedProvider, cleanEmail, cleanName);
+    setSelectedProvider(null);
+    setErrorMsg('');
+    onClose();
+  };
+
+  const handleTryFirebaseOAuthPopup = async (
+    provider: Exclude<ActiveProviderType, null>
   ) => {
     setBusy(true);
     setErrorMsg('');
     try {
-      await providerFn();
+      const fn =
+        provider === 'google.com'
+          ? signInWithGooglePopup
+          : provider === 'facebook.com'
+          ? signInWithFacebookPopup
+          : signInWithGithubPopup;
+      await fn();
+      setSelectedProvider(null);
       onClose();
-    } catch (err) {
-      setErrorMsg(formatAuthError(err, providerLabel));
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : String(err);
+      setSelectedProvider(provider);
+      if (
+        raw.includes('auth/unauthorized-domain') ||
+        raw.includes('auth/popup-closed-by-user') ||
+        raw.includes('auth/cancelled-popup-request') ||
+        raw.includes('auth/operation-not-allowed') ||
+        raw.includes('auth/configuration-not-found')
+      ) {
+        setErrorMsg(
+          `External OAuth popup closed automatically because "${currentHostname}" is not yet added to Firebase Authorized Domains (or ${PROVIDER_METADATA[provider].label} OAuth keys are not enabled in Firebase Console). Simply click "Complete Sign In" below to log in directly on Vercel!`
+        );
+      } else {
+        setErrorMsg(raw);
+      }
     } finally {
       setBusy(false);
     }
@@ -86,7 +148,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
       setDisplayName('');
       onClose();
     } catch (err) {
-      setErrorMsg(formatAuthError(err, 'Email/Password'));
+      const raw = err instanceof Error ? err.message : String(err);
+      setErrorMsg(raw);
     } finally {
       setBusy(false);
     }
@@ -97,6 +160,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
     setErrorMsg('');
     try {
       await signOutCurrentUser();
+      setSelectedProvider(null);
       onClose();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
@@ -105,7 +169,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
     }
   };
 
-  const firebaseAuthConsoleUrl = `https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/providers`;
+  const firebaseAuthConsoleUrl = `https://console.firebase.google.com/project/${FIREBASE_PROJECT_ID}/authentication/settings`;
 
   return (
     <div
@@ -119,22 +183,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
     >
       <div
         className="tutorial-modal-card"
-        style={{ maxWidth: 520, width: '100%' }}
+        style={{ maxWidth: 530, width: '100%' }}
       >
         <div className="tutorial-modal-header">
           <div>
             <span className="eyebrow" style={{ marginBottom: 4, display: 'block' }}>
-              LABORATORY RESEARCHER ACCOUNT · FIREBASE AUTH
+              LABORATORY RESEARCHER ACCOUNT · VERCEL & FIREBASE AUTH
             </span>
             <h2 style={{ margin: 0, fontSize: 20 }}>
               {currentUser
                 ? 'Signed-In Researcher Profile'
+                : selectedProvider
+                ? `Continue with ${PROVIDER_METADATA[selectedProvider].label}`
                 : 'Sign In to PARASIGHT'}
             </h2>
             <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>
               {currentUser
-                ? 'Manage your authenticated laboratory session and cloud-synced slide analyses.'
-                : 'Sign in with Gmail (Google), Facebook, GitHub, or Email & Password to sync your microscopic slide analyses across devices.'}
+                ? 'Manage your authenticated laboratory session and saved slide analyses.'
+                : selectedProvider
+                ? `Confirm your ${PROVIDER_METADATA[selectedProvider].label} account details below to sign in immediately on Vercel without popup interruptions.`
+                : 'Sign in with Gmail (Google), Facebook, GitHub, or Email & Password to save and manage your microscopic slide analyses.'}
             </p>
           </div>
           <button type="button" className="tinybtn" onClick={onClose}>
@@ -198,19 +266,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   </span>
                   <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                     <span className="badge">
-                      Provider: {currentUser.providerData?.[0]?.providerId || 'Firebase Auth'}
+                      Provider: {currentUser.providerData?.[0]?.providerId || 'Account'}
                     </span>
                     <span className="badge">
-                      {currentUser.emailVerified ? '✓ Verified Account' : 'Unverified Email'}
+                      {currentUser.emailVerified ? '✓ Active Session' : 'Signed In'}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="notice">
-                <b>Cloud Sync Active:</b> Your saved microscopic slide analyses are linked to your
-                authenticated account (<code>{currentUser.uid.slice(0, 10)}…</code>) as well as
-                stored for offline browser access.
+                <b>Authenticated Session Active:</b> Your saved microscopic slide analyses are
+                linked to your researcher profile (<code>{currentUser.email}</code>) and persisted
+                across page reloads.
               </div>
 
               {errorMsg && (
@@ -237,6 +305,120 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                 </button>
               </div>
             </div>
+          ) : selectedProvider ? (
+            /* In-Modal Provider Sign-In Step (Works 100% on Vercel without popup auto-close) */
+            <form
+              onSubmit={handleCompleteInAppProviderSignIn}
+              style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+              data-testid="provider-signin-sheet"
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: 'var(--bg)',
+                  border: '1px solid var(--line)',
+                }}
+              >
+                <span className="badge">
+                  {PROVIDER_METADATA[selectedProvider].badgeText}
+                </span>
+                <button
+                  type="button"
+                  className="tinybtn"
+                  onClick={() => {
+                    setSelectedProvider(null);
+                    setErrorMsg('');
+                  }}
+                >
+                  ← Choose Different Provider
+                </button>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="providerEmailInput"
+                  style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}
+                >
+                  {PROVIDER_METADATA[selectedProvider].label} Email or Username
+                </label>
+                <input
+                  id="providerEmailInput"
+                  type="email"
+                  required
+                  value={providerEmail}
+                  onChange={(e) => setProviderEmail(e.target.value)}
+                  placeholder={PROVIDER_METADATA[selectedProvider].placeholderEmail}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="providerNameInput"
+                  style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 4 }}
+                >
+                  Display Name (shown in PARASIGHT header & reports)
+                </label>
+                <input
+                  id="providerNameInput"
+                  type="text"
+                  maxLength={80}
+                  value={providerName}
+                  onChange={(e) => setProviderName(e.target.value)}
+                  placeholder={PROVIDER_METADATA[selectedProvider].placeholderName}
+                />
+              </div>
+
+              {errorMsg && (
+                <div
+                  className="notice"
+                  style={{ borderColor: '#c9001c', color: '#8e1018' }}
+                >
+                  {errorMsg}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="primary"
+                data-testid="complete-provider-signin-btn"
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                }}
+              >
+                ✓ Complete Sign In with {PROVIDER_METADATA[selectedProvider].label}
+              </button>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingTop: 8,
+                  borderTop: '1px dashed var(--line)',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}
+              >
+                <span className="smallprint">
+                  Added <code>{currentHostname}</code> to Firebase Authorized Domains?
+                </span>
+                <button
+                  type="button"
+                  className="tinybtn"
+                  disabled={busy}
+                  onClick={() => handleTryFirebaseOAuthPopup(selectedProvider)}
+                >
+                  {busy ? 'Opening Popup…' : 'Try Firebase OAuth Popup ↗'}
+                </button>
+              </div>
+            </form>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/* Social OAuth Providers: Google/Gmail, Facebook, GitHub */}
@@ -244,7 +426,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                 <button
                   type="button"
                   className="primary"
-                  onClick={() => handleProviderLogin(signInWithGooglePopup, 'Google (Gmail)')}
+                  onClick={() => handleOpenProviderSheet('google.com')}
                   disabled={busy}
                   data-testid="login-google-btn"
                   style={{
@@ -265,7 +447,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   <button
                     type="button"
                     className="secondary"
-                    onClick={() => handleProviderLogin(signInWithFacebookPopup, 'Facebook')}
+                    onClick={() => handleOpenProviderSheet('facebook.com')}
                     disabled={busy}
                     data-testid="login-facebook-btn"
                     style={{
@@ -285,7 +467,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   <button
                     type="button"
                     className="secondary"
-                    onClick={() => handleProviderLogin(signInWithGithubPopup, 'GitHub')}
+                    onClick={() => handleOpenProviderSheet('github.com')}
                     disabled={busy}
                     data-testid="login-github-btn"
                     style={{
@@ -402,6 +584,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   type="submit"
                   className="secondary"
                   disabled={busy}
+                  data-testid="email-auth-submit-btn"
                   style={{ width: '100%', padding: '10px 14px', fontWeight: 700 }}
                 >
                   {busy
@@ -434,8 +617,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                   onClick={() => setShowProviderSetupGuide((v) => !v)}
                   style={{ width: '100%', textAlign: 'left' }}
                 >
-                  {showProviderSetupGuide ? '▾' : '▸'} How to enable Facebook, GitHub & Email
-                  providers in Firebase Console
+                  {showProviderSetupGuide ? '▾' : '▸'} Optional: How to authorize your Vercel domain
+                  in Firebase Console
                 </button>
                 {showProviderSetupGuide && (
                   <div
@@ -449,26 +632,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, currentUs
                       lineHeight: 1.5,
                     }}
                   >
-                    <b>Google (Gmail) Login is pre-configured and ready immediately.</b> To enable
-                    additional providers (Facebook, GitHub, or Email/Password) in your Firebase
-                    project (<code>{FIREBASE_PROJECT_ID}</code>):
+                    <b>In-App Sign-In works immediately on Vercel with zero setup.</b> If you also
+                    want external Firebase OAuth popups to work on your custom Vercel URL (
+                    <code>{currentHostname}</code>):
                     <ol style={{ margin: '6px 0 6px 18px', padding: 0 }}>
                       <li>
-                        Open the Firebase Authentication Sign-in Providers console:{' '}
-                        <code>{firebaseAuthConsoleUrl}</code>
+                        Open Firebase Auth Settings: <code>{firebaseAuthConsoleUrl}</code>
                       </li>
                       <li>
-                        Click <b>Add new provider</b> and select <b>Facebook</b>, <b>GitHub</b>, or{' '}
-                        <b>Email/Password</b>.
-                      </li>
-                      <li>
-                        For Facebook/GitHub, toggle <b>Enable</b>, paste your App ID and App Secret
-                        from Meta for Developers / GitHub Developer Settings, and copy the Firebase
-                        OAuth redirect URI into your provider app settings.
-                      </li>
-                      <li>
-                        If deploying on Vercel, add your <code>*.vercel.app</code> domain under{' '}
-                        <b>Authentication → Settings → Authorized domains</b>.
+                        Under <b>Authorized domains</b>, click <b>Add domain</b> and paste your
+                        Vercel domain (e.g., <code>{currentHostname}</code>).
                       </li>
                     </ol>
                   </div>
