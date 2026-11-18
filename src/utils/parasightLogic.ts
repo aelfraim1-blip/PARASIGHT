@@ -6,6 +6,9 @@ export interface ParasiteSpecies {
   stage: string;
   sizeRangeUm: string;
   morphology: string;
+  associatedIllness: string;
+  commonSymptoms: string;
+  transmissionRoute: string;
 }
 
 /**
@@ -20,6 +23,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Fertilized / Unfertilized Egg',
     sizeRangeUm: '45–75 × 35–50 μm',
     morphology: 'Broad oval shape with thick, mammillated (bumpy) albuminous outer coat; golden-brown in iodine/bile stain.',
+    associatedIllness: 'Ascariasis (Intestinal Roundworm Infection)',
+    commonSymptoms: 'Abdominal pain or discomfort, bloating, nausea, intermittent diarrhea, nutritional malabsorption, or cough/wheezing during larval lung migration (Löffler syndrome); light infections may be asymptomatic.',
+    transmissionRoute: 'Fecal-oral ingestion of embryonated eggs from contaminated soil, water, or unwashed produce.',
   },
   {
     classId: 1,
@@ -29,6 +35,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Unembryonated Egg',
     sizeRangeUm: '50–55 × 22–24 μm',
     morphology: 'Distinctive barrel or lemon shape with prominent hyaline polar plugs at both ends and smooth triple-layered shell.',
+    associatedIllness: 'Trichuriasis (Human Whipworm Infection)',
+    commonSymptoms: 'Mucoid or bloody diarrhea (Trichuris dysentery syndrome in heavy infections), abdominal cramps, tenesmus (painful urge to defecate), iron-deficiency anemia, and impaired growth.',
+    transmissionRoute: 'Fecal-oral ingestion of embryonated eggs from soil-contaminated hands, food, or water.',
   },
   {
     classId: 2,
@@ -38,6 +47,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Segmented Ovum',
     sizeRangeUm: '55–75 × 35–40 μm',
     morphology: 'Thin, colorless hyaline shell containing a 4- to 8-cell segmented morula with clear space between blastomeres and shell.',
+    associatedIllness: 'Ancylostomiasis / Hookworm Disease',
+    commonSymptoms: 'Iron-deficiency anemia, chronic fatigue, weakness, epigastric abdominal pain, pallor, and localized itchy skin rash ("ground itch") at the site of larval skin penetration.',
+    transmissionRoute: 'Percutaneous penetration of filariform larvae from contaminated soil (commonly barefoot contact) or oral ingestion.',
   },
   {
     classId: 3,
@@ -47,6 +59,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Embryonated Egg',
     sizeRangeUm: '50–60 × 20–30 μm',
     morphology: 'Elongated, asymmetrical D-shaped (flattened on one side) colorless double-layered shell often containing a folded larva.',
+    associatedIllness: 'Enterobiasis / Oxyuriasis (Pinworm Infection)',
+    commonSymptoms: 'Intense nocturnal perianal itching (pruritus ani), disturbed sleep, irritability, restlessness, and secondary skin excoriation.',
+    transmissionRoute: 'Fecal-oral autoinfection or person-to-person spread via embryonated eggs on hands, bedding, clothing, or surfaces.',
   },
   {
     classId: 4,
@@ -56,6 +71,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Embryophoric Egg',
     sizeRangeUm: '30–43 μm diameter',
     morphology: 'Spherical egg with thick, radially striated dark-brown embryophore surrounding a 6-hooked oncosphere (hexacanth embryo).',
+    associatedIllness: 'Taeniasis (Intestinal Tapeworm Infection) & potential Cysticercosis (T. solium)',
+    commonSymptoms: 'Mild abdominal discomfort, nausea, appetite changes, weight loss, passage of tapeworm proglottid segments in stool; T. solium egg ingestion can cause neurocysticercosis (headaches, seizures).',
+    transmissionRoute: 'Consumption of raw or undercooked infected beef (T. saginata) or pork (T. solium); fecal-oral egg ingestion for T. solium cysticercosis.',
   },
   {
     classId: 5,
@@ -65,6 +83,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Cyst / Trophozoite',
     sizeRangeUm: '8–19 × 7–10 μm',
     morphology: 'Oval cyst with 2–4 nuclei, longitudinal axonemes, and median bodies; pear-shaped trophozoite with bilateral nuclei.',
+    associatedIllness: 'Giardiasis (Flagellate Protozoan Enteritis / "Beaver Fever")',
+    commonSymptoms: 'Foul-smelling watery or greasy stools (steatorrhea), flatulence, abdominal cramps, sulfur burps, bloating, fatigue, and weight loss.',
+    transmissionRoute: 'Ingestion of hardy cysts in contaminated drinking or recreational water, food, or person-to-person fecal-oral contact.',
   },
   {
     classId: 6,
@@ -74,6 +95,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Cyst / Trophozoite',
     sizeRangeUm: '10–20 μm diameter',
     morphology: 'Spherical mature cyst with 1–4 nuclei (central karyosome, fine peripheral chromatin) and cigar-shaped chromatoid bodies with blunt ends.',
+    associatedIllness: 'Amoebiasis (Amoebic Colitis / Amoebic Dysentery & Extraintestinal Amoebic Liver Abscess)',
+    commonSymptoms: 'Gradual onset of colicky lower abdominal pain, frequent loose stools with blood and mucus, fever, tenesmus; potential right-upper-quadrant pain if hepatic abscess develops.',
+    transmissionRoute: 'Fecal-oral ingestion of mature quadrinucleate cysts in contaminated water or food.',
   },
   {
     classId: 7,
@@ -83,6 +107,9 @@ export const TARGET_PARASITES: ParasiteSpecies[] = [
     stage: 'Mature Cyst',
     sizeRangeUm: '10–35 μm diameter',
     morphology: 'Spherical cyst typically containing up to 8 nuclei with eccentric karyosomes, coarse irregular chromatin, and splintered chromatoid bars.',
+    associatedIllness: 'Non-Pathogenic Commensal Colonization (Indicator of Fecal-Oral Exposure)',
+    commonSymptoms: 'Generally asymptomatic and harmless by itself, but indicates ingestion of fecal-contaminated water or food—warranting screening for co-occurring pathogenic parasites.',
+    transmissionRoute: 'Fecal-oral ingestion of mature cysts via contaminated water or food.',
   },
 ];
 
@@ -275,129 +302,6 @@ export function classifyImageCondition(
   return { clarityLabel, illuminationLabel, debrisLabel };
 }
 
-export const KNOWLEDGE_BASE: [string[], string][] = [
-  [
-    ['8', 'eight', 'species', 'target', 'categories', 'phase a', 'ascaris', 'trichuris', 'ancylostoma', 'enterobius', 'taenia'],
-    'Phase A of the PARASIGHT Research Plan specifies eight target intestinal parasite categories across two major groups: (1) Helminths: Ascaris lumbricoides, Trichuris trichiura, Ancylostoma (Hookworm), Enterobius vermicularis, and Taenia spp.; and (2) Protozoa: Giardia intestinalis, Entamoeba histolytica, and Entamoeba coli.',
-  ],
-  [
-    ['yolo', '70%', '30%', 'split', 'phase b', 'phase c', 'bounding box format'],
-    'In Phases B and C of the study, expert-verified annotations are converted into YOLO bounding-box format (<class_id> <x_center> <y_center> <width> <height>) and partitioned into 70% for model training (with a validation subset drawn from training data) and 30% reserved for held-out testing.',
-  ],
-  [
-    ['time reduction', 'manual time', 'analysis time', 'speed', 'efficiency', 'objective 6'],
-    'Objective 6 compares PARASIGHT automated processing time against manual microscopic examination by trained personnel. Time Reduction (%) is calculated as ((Manual Time − PARASIGHT Time) / Manual Time) × 100, alongside descriptive statistics (mean, standard deviation, median, minimum, and maximum).',
-  ],
-  [
-    ['error frequency', 'common errors', 'limitations', 'objective 7', 'debris error', 'misclassification'],
-    'Objective 7 categorizes false positives, false negatives, and misclassifications by probable cause: low parasite density, poor image quality (blur/illumination), fecal debris or artifacts, morphological similarity, partial visibility, or overlapping objects. Error Frequency (%) = (Number of Errors of a Given Type / Total Number of Errors) × 100.',
-  ],
-  [
-    ['researchers', 'authors', 'who made', 'team', 'berdejo', 'cabayao', 'malaque', 'tanucan', 'tayson'],
-    'The PARASIGHT study ("PARASIGHT: An AI-Based Microscopic Image Analysis System For Coproparasitological Parasite Detection", November 2026) is authored by researchers Brigette Shane L. Berdejo, Jewel Nicole B. Cabayao, Rhyza Angela D. Malaque, Samantha Presella B. Tanucan, and Azhera Rhiana A. Tayson.',
-  ],
-  [
-    ['hypothesis', 'null hypothesis', 'alternative hypothesis', 'h0', 'h1'],
-    'Null Hypothesis (H₀): There is no significant difference in PARASIGHT’s detection and classification performance under varying microscopic image conditions, nor in the analysis time between PARASIGHT and manual microscopic analysis. Alternative Hypothesis (H₁): There is a significant difference in both performance under varying conditions and analysis time.',
-  ],
-  [
-    ['transmit', 'transmission', 'spread', 'infect', 'contagious'],
-    'Intestinal parasites can spread through different routes: contaminated food or water, contaminated hands or soil, or specific exposure routes depending on the species. Safe water, sanitation, handwashing, and food hygiene reduce risk. Not every parasite spreads the same way.',
-  ],
-  [
-    ['prevent', 'prevention', 'avoid', 'protect', 'hygiene'],
-    'Wash hands with soap after toilet use and before food preparation or eating; drink safe water; wash produce; cook food thoroughly; use proper sanitation; and follow local public-health guidance. Prevention depends on the organism and route of exposure.',
-  ],
-  [
-    ['symptom', 'symptoms', 'sign', 'feel sick'],
-    'Possible symptoms can include diarrhea, abdominal discomfort, nausea, bloating, or no noticeable symptoms. These are nonspecific and cannot identify a parasite by themselves. A healthcare professional can assess whether stool testing or other evaluation is appropriate.',
-  ],
-  [
-    ['treat', 'treatment', 'medicine', 'drug', 'cure', 'medication'],
-    'Treatment depends on the parasite species and the person’s clinical circumstances. Do not take medication based on a photo or chatbot response. Consult a qualified healthcare professional for testing and treatment advice.',
-  ],
-  [
-    ['protozoa', 'protozoan'],
-    'Protozoa are single-celled organisms. In PARASIGHT, the target intestinal protozoa are Giardia intestinalis, Entamoeba histolytica, and Entamoeba coli, identified in stool specimens by cysts or trophozoites. Microscopic appearance should be interpreted by trained personnel.',
-  ],
-  [
-    ['helminth', 'worm', 'roundworm', 'hookworm', 'whipworm', 'tapeworm', 'pinworm'],
-    'Helminths are parasitic worms, including nematodes and cestodes. PARASIGHT covers Ascaris lumbricoides, Trichuris trichiura, Ancylostoma (Hookworm), Enterobius vermicularis, and Taenia spp. Identification requires appropriate microscopy and expert interpretation.',
-  ],
-  [
-    ['microscope', 'microscopy', 'image quality', 'illumination', 'debris', 'blur', 'focus', 'objective 5'],
-    'Objective 5 evaluates three primary image condition variations: (A) Image Clarity, (B) Illumination Variation, and (C) Presence of Fecal Debris. Blur, uneven lighting, glare, overlapping objects, and fecal artifacts can affect detection performance and require human verification.',
-  ],
-  [
-    ['quality check', 'focus estimate', 'brightness', 'contrast'],
-    'PARASIGHT computes image-level quality indicators including a focus-detail estimate (Laplacian variance), mean brightness, grayscale contrast, and candidate debris density. These measurements help reviewers identify images that may need reacquisition or closer inspection.',
-  ],
-  [
-    ['review annotation', 'human verification', 'reviewer notes', 'ground truth'],
-    'The review workspace separates automated candidate-region screening from human verification. A reviewer can record a reference label (including the 8 target species), a review decision, and notes.',
-  ],
-  [
-    ['dataset', 'parasito', 'mendeley', '779'],
-    'ParasitoBank on Mendeley Data reports 779 microscopic fecal-field images and 1,620 labeled intestinal parasites in COCO format (CC BY 4.0). The separate Mendeley Multiple Parasites Image Dataset (Version 3) reports 34,298 microscopy images across several parasite groups and host cells. Sources: https://data.mendeley.com/datasets/725hpzpwzf/1 and https://data.mendeley.com/datasets/38jtn4nzs6/3',
-  ],
-  [
-    ['unicamp', 'lids', 'repository', 'larvae', 'cyst'],
-    'The LIDS-UNICAMP intestinal-parasite repository includes 18,194 images across helminth eggs (5,112), helminth larvae (3,514), and protozoan cysts (9,568) with segmentation masks and documented splits. Source: https://github.com/LIDS-UNICAMP/intestinal-parasites-datasets',
-  ],
-  [
-    ['precision', 'recall', 'f1', 'f1-score', 'confusion matrix', 'accuracy'],
-    'Precision = TP / (TP + FP) measures the proportion of predicted parasites that are correct; Recall = TP / (TP + FN) measures the proportion of actual reference parasites detected; F1-score = 2 × (Precision × Recall) / (Precision + Recall). Overall and per-class accuracy are derived from the confusion matrix (Sokolova & Lapalme, 2009; Powers, 2011; Stehman, 1997).',
-  ],
-  [
-    ['train', 'training', 'model', 'learn', 'dataset preparation'],
-    'A reliable image-analysis workflow uses well-organized microscopy images, verified YOLO annotations, a 70% training / 30% testing split, and careful evaluation to prevent duplicate images or data leakage across partitions (Ross, 2012).',
-  ],
-  [
-    ['circle', 'encircle', 'bounding box', 'detection', 'detect'],
-    'PARASIGHT analyzes uploaded microscopic images and highlights candidate regions with bounding boxes/ellipses, confidence scores, and YOLO normalized coordinates for closer inspection and expert verification.',
-  ],
-  [
-    ['parasight', 'project', 'website', 'prototype'],
-    'PARASIGHT is an AI-assisted microscopic image analysis system for coproparasitological parasite detection. It integrates image upload and demo slides, image condition assessment, candidate-region visualization, YOLO coordinate export, analysis time comparison, dataset curation tools, and an offline educational assistant.',
-  ],
-  [
-    ['diagnos', 'medical advice', 'doctor'],
-    'This tool is for education and research support, not clinical diagnosis. PARASIGHT is intended as an assistive tool for laboratory personnel and cannot replace professional laboratory examination (WHO, 2021).',
-  ],
-  [
-    ['giardia', 'giardiasis'],
-    'Giardia intestinalis (also called G. duodenalis or G. lamblia) is a target protozoan in PARASIGHT. Yarahmadi et al. (2025) demonstrated automatic classification of Giardia infection from stool microscopic images using deep neural networks.',
-  ],
-  [
-    ['entamoeba', 'amoebiasis', 'amebiasis'],
-    'Entamoeba histolytica and Entamoeba coli are both target protozoan categories in PARASIGHT. Because Entamoeba species share morphological similarities under light microscopy, distinguishing pathogenic E. histolytica from commensal E. coli requires careful nuclear and chromatoid examination.',
-  ],
-  [
-    ['sensitivity', 'threshold', 'confidence cutoff'],
-    'Detection sensitivity controls how readily the system includes candidate detections. A higher setting lowers the confidence cutoff so more candidates appear, while a lower setting applies stricter filtering.',
-  ],
-  [
-    ['false positive', 'false negative', 'missed'],
-    'A false positive (FP) occurs when PARASIGHT detects a non-parasitic object (such as fecal debris) or an incorrect parasite class. A false negative (FN) occurs when it fails to detect an expert-annotated parasite, often due to low density or blur.',
-  ],
-  [
-    ['pcr', 'rt-pcr', 'coproscopy', 'molecular test', 'microscopy versus'],
-    'The 2017 study comparing coproscopy with real-time PCR found that detection rates differed by parasite and method; for several protozoa, RT-PCR detected more positives than microscopy, while some microscopy-positive samples were PCR-negative. Source: Abu-Madi et al. (2017), https://pmc.ncbi.nlm.nih.gov/articles/PMC5588727/',
-  ],
-  [
-    ['negative result', 'one sample', 'multiple stool', 'second sample', 'third sample', 'missed infection'],
-    'A negative stool microscopy result does not always rule out intestinal parasites. In a 2025 retrospective study of 103 infected patients who submitted three stool specimens, 61.2% were detected from the first specimen, with additional cases detected in the second and third. Source: Ananchaisarp et al. (2025), https://link.springer.com/article/10.1007/s00436-025-08570-5',
-  ],
-  [
-    ['what is', 'intestinal parasite', 'parasite'],
-    'Intestinal parasites are organisms that live in or depend on a host, including protozoa (single-celled organisms) and helminths (parasitic worms). Baseline references: Dąbrowska et al. (2024); Mathison et al. (2020); Abu-Madi et al. (2017); Intestinal Parasitic Infections in 2023 (PMC10284646).',
-  ],
-  [
-    ['sources', 'references', 'articles', 'baseline information', 'citation', 'bibliography'],
-    'Key references in the PARASIGHT Research Plan include Dąbrowska et al. (2024), Mathison et al. (2020), Yarahmadi et al. (2025), Corpuz et al. (2025), Lundin et al. (2024), Bruckner (2024), Sokolova & Lapalme (2009), Powers (2011), Stehman (1997), Field (2018), and WHO (2021), alongside baseline clinical studies by Abu-Madi et al. (2017) and Ananchaisarp et al. (2025).',
-  ],
-];
-
 export interface MorphologyFeatureVector {
   aspectRatio: number;
   circularity: number;
@@ -502,7 +406,18 @@ export interface AutomatedDiagnosticSummary {
   primaryGroup: 'Helminth' | 'Protozoan' | 'None';
   primaryStage: string;
   maxConfidence: number | null;
-  speciesBreakdown: { label: string; classId: number; count: number; maxConf: number }[];
+  primaryAssociatedIllness: string;
+  primarySymptoms: string;
+  primaryTransmission: string;
+  speciesBreakdown: {
+    label: string;
+    classId: number;
+    count: number;
+    maxConf: number;
+    associatedIllness: string;
+    commonSymptoms: string;
+    transmissionRoute: string;
+  }[];
   automatedDecision: string;
   automatedNotes: string;
 }
@@ -528,6 +443,9 @@ export function generateAutomatedDiagnosticReport(
       primaryGroup: 'None',
       primaryStage: 'None detected',
       maxConfidence: null,
+      primaryAssociatedIllness: 'No parasitic infection / illness identified at current threshold',
+      primarySymptoms: 'None indicated from current microscopic field.',
+      primaryTransmission: 'N/A',
       speciesBreakdown: [],
       automatedDecision: 'Needs expert review',
       automatedNotes: `[${engineLabel}] No high-confidence parasitic structures surpassed the current sensitivity threshold. Consider adjusting sensitivity or inspecting under higher magnification.`,
@@ -577,7 +495,7 @@ export function generateAutomatedDiagnosticReport(
 
   const automatedNotes = `[${engineLabel}] Auto-detected and annotated ${detections.length} structure${
     detections.length === 1 ? '' : 's'
-  }: ${breakdownText}. Diagnostic morphology: ${top.note}`;
+  }: ${breakdownText}. Possible associated illness: ${topSp.associatedIllness}. Diagnostic morphology: ${top.note}`;
 
   return {
     primarySpecies: top.label,
@@ -585,12 +503,21 @@ export function generateAutomatedDiagnosticReport(
     primaryGroup: topSp.group,
     primaryStage: topSp.stage,
     maxConfidence: top.maxConf,
-    speciesBreakdown: sorted.map(({ label, classId, count, maxConf }) => ({
-      label,
-      classId,
-      count,
-      maxConf,
-    })),
+    primaryAssociatedIllness: topSp.associatedIllness,
+    primarySymptoms: topSp.commonSymptoms,
+    primaryTransmission: topSp.transmissionRoute,
+    speciesBreakdown: sorted.map(({ label, classId, count, maxConf }) => {
+      const spInfo = TARGET_PARASITES[classId] || TARGET_PARASITES[0];
+      return {
+        label,
+        classId,
+        count,
+        maxConf,
+        associatedIllness: spInfo.associatedIllness,
+        commonSymptoms: spInfo.commonSymptoms,
+        transmissionRoute: spInfo.transmissionRoute,
+      };
+    }),
     automatedDecision,
     automatedNotes,
   };
@@ -617,129 +544,14 @@ export interface ChatSlideContext {
     confidence: number | null;
     yoloLine?: string;
     morphologicalNote?: string;
+    associatedIllness?: string;
+    commonSymptoms?: string;
   }[];
   diagnosticSummary?: string;
+  associatedIllness?: string;
+  commonSymptoms?: string;
 }
 
-export function botReply(question: string, slideContext?: ChatSlideContext | null): string {
-  const q = question.toLowerCase().trim();
 
-  // 1. Check if the user is asking about the currently active slide / image / detections
-  const asksAboutCurrentSlide =
-    q.includes('current slide') ||
-    q.includes('this slide') ||
-    q.includes('active slide') ||
-    q.includes('my slide') ||
-    q.includes('this image') ||
-    q.includes('what did it find') ||
-    q.includes('what did the ai') ||
-    q.includes('explain the result') ||
-    q.includes('explain current') ||
-    q.includes('on the screen') ||
-    q.includes('on screen');
-
-  if (asksAboutCurrentSlide) {
-    if (!slideContext || !slideContext.fileName) {
-      return 'No microscopic slide is currently loaded in the Analyze stage. Click "⚡ Load & Analyze Slide" on any of the 8 target species (or click the "Load Sample Slide" button right above this chat) and I will give you a complete diagnostic breakdown of the detections, YOLO coordinates, and optical image quality!';
-    }
-
-    const detCount = slideContext.detections?.length || 0;
-    const detLines =
-      detCount > 0
-        ? slideContext.detections
-            .map((d, i) => {
-              const confPct =
-                typeof d.confidence === 'number' ? `${(d.confidence * 100).toFixed(1)}%` : 'N/A';
-              return `• Box #${i + 1}: ${d.label} (Class ${d.classId ?? 0}, Confidence ${confPct}) — ${
-                d.morphologicalNote || 'Verified morphological profile'
-              }${d.yoloLine ? ` [YOLO: ${d.yoloLine}]` : ''}`;
-            })
-            .join('\n')
-        : '• No high-confidence parasite bounding boxes detected at the current sensitivity setting.';
-
-    const qualLine = slideContext.quality
-      ? `Optical Quality (Obj. 5): Clarity ${slideContext.quality.focus} (${slideContext.quality.clarityLabel}), Illumination ${slideContext.quality.brightness}/255 (${slideContext.quality.illuminationLabel}), Debris: ${slideContext.quality.debrisLabel}.`
-      : '';
-
-    return `🔬 AI Slide Analysis for "${slideContext.fileName}" (${slideContext.stainEstimate || 'Wet Mount'}):\n• Total Detections: ${detCount} structure${detCount === 1 ? '' : 's'} localized\n${detLines}\n${qualLine ? `• ${qualLine}\n` : ''}• Clinical Note: ${slideContext.diagnosticSummary || 'Verify candidate boxes in the Reviewer panel before exporting.'}`;
-  }
-
-  // 2. Check if user is asking for a comparison or specific target species (Classes 0–7)
-  const matchedSpecies = TARGET_PARASITES.filter((sp) => {
-    const sci = sp.scientificName.toLowerCase();
-    const firstWord = sci.split(' ')[0];
-    const common = sp.commonName.toLowerCase();
-    return (
-      q.includes(sci) ||
-      q.includes(firstWord) ||
-      q.includes(common) ||
-      (sp.classId === 0 && q.includes('roundworm')) ||
-      (sp.classId === 1 && q.includes('whipworm')) ||
-      (sp.classId === 2 && q.includes('hookworm')) ||
-      (sp.classId === 3 && q.includes('pinworm')) ||
-      (sp.classId === 4 && q.includes('tapeworm')) ||
-      (sp.classId === 6 && q.includes('histolytica')) ||
-      (sp.classId === 7 && q.includes('coli'))
-    );
-  });
-
-  if (matchedSpecies.length >= 2) {
-    const compLines = matchedSpecies
-      .map(
-        (sp) =>
-          `• Class ${sp.classId} — ${sp.scientificName} (${sp.commonName}, ${sp.group}): ${sp.stage}, Size ${sp.sizeRangeUm}. Key Morphology: ${sp.morphology}`
-      )
-      .join('\n');
-    return `Here is a direct morphological comparison of the ${matchedSpecies.length} species you asked about:\n${compLines}\n• Tip: In PARASIGHT, you can click either species on the Analyze page to compare their bounding-box features side by side.`;
-  }
-
-  // 3. If a single specific species was asked about (and not asking for the full 8-species list)
-  const asksAllEight =
-    q.includes('8 target') || q.includes('eight target') || q.includes('phase a');
-  if (matchedSpecies.length === 1 && !asksAllEight) {
-    const sp = matchedSpecies[0];
-    const slideMatchNote =
-      slideContext && slideContext.fileName
-        ? `\n• Active Slide Context ("${slideContext.fileName}"): ${slideContext.detections.length} structure(s) localized on your current slide.`
-        : '';
-    return `🔬 ${sp.scientificName} (${sp.commonName}) — YOLO Class ${sp.classId} (${sp.group}):\n• Diagnostic Stage & Scale: ${sp.stage} (${sp.sizeRangeUm})\n• Key Morphological Features: ${sp.morphology}\n• How PARASIGHT Detects It: Evaluates aspect ratio, shell wall contrast, and internal morphological descriptors to localize normalized YOLO coordinates (<class_id> <x_center> <y_center> <width> <height>).${slideMatchNote}`;
-  }
-
-  // 4. Collect all matching knowledge base entries (so multi-topic questions get complete answers)
-  const matchedAnswers: string[] = [];
-  for (const [keys, answer] of KNOWLEDGE_BASE) {
-    if (keys.some((k) => q.includes(k))) {
-      if (!matchedAnswers.includes(answer)) {
-        matchedAnswers.push(answer);
-      }
-    }
-  }
-
-  if (matchedAnswers.length > 0) {
-    return matchedAnswers.slice(0, 2).join('\n\n');
-  }
-
-  // 5. Conversational greetings or help requests
-  if (
-    q.includes('hello') ||
-    q.includes('hi') ||
-    q.includes('hey') ||
-    q.includes('help') ||
-    q.includes('what can you do') ||
-    q.includes('who are you')
-  ) {
-    const activeNote = slideContext?.fileName
-      ? `\n\n🔬 I also see you currently have "${slideContext.fileName}" loaded (${slideContext.detections.length} detection${slideContext.detections.length === 1 ? '' : 's'})—ask me "Explain current slide" for a live breakdown!`
-      : '';
-    return `Hello! I am the PARASIGHT AI Assistant. I can help you with:\n• Identifying & comparing all 8 target intestinal parasites (Classes 0–7: 5 Helminths & 3 Protozoa)\n• Explaining your currently loaded microscope slide and its YOLO detections\n• Calculating Precision, Recall, F1-score, Time Reduction (%), and Error Frequency (%)\n• Preparing a 70% Training / 30% Testing dataset split with SHA-256 duplicate auditing${activeNote}`;
-  }
-
-  // 6. Intelligent contextual synthesis for any other open-ended question
-  const contextHint = slideContext?.fileName
-    ? ` Right now, your active slide is "${slideContext.fileName}" with ${slideContext.detections.length} detected structure(s)—click "🔬 Explain Current Slide" below if you want me to analyze it.`
-    : '';
-
-  return `Based on the PARASIGHT coproparasitology framework, I can analyze any of the 8 target intestinal parasites (Ascaris lumbricoides, Trichuris trichiura, Ancylostoma, Enterobius vermicularis, Taenia spp., Giardia intestinalis, Entamoeba histolytica, and Entamoeba coli), explain the 70/30 YOLO training/testing methodology, or evaluate optical clarity, illumination, and fecal debris conditions.${contextHint} Try clicking one of the quick AI prompts below or ask me to compare any two parasite species!`;
-}
 
 

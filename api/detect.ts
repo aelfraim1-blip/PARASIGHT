@@ -3,17 +3,29 @@ import { GoogleGenAI, Type } from '@google/genai';
 interface VercelRequestLike {
   method?: string;
   body?: unknown;
+  json?: () => Promise<unknown>;
+  on?: (event: string, listener: (chunk?: unknown) => void) => void;
 }
 
 interface VercelResponseLike {
-  status: (code: number) => VercelResponseLike;
-  json: (data: unknown) => void;
+  statusCode?: number;
+  status?: (code: number) => { json?: (data: unknown) => void };
+  json?: (data: unknown) => void;
   setHeader?: (name: string, value: string) => void;
+  end?: (chunk?: string) => void;
 }
 
+const GEMINI_VISION_MODELS = ['gemini-flash-latest', 'gemini-3.8-flash'] as const;
+
 function getGenAIClient(): GoogleGenAI | null {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === 'MY_GEMINI_API_KEY' || key.trim() === '') {
+  const rawKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENAI_API_KEY ||
+    '';
+  const key = rawKey.trim();
+  if (!key || key === 'MY_GEMINI_API_KEY') {
     return null;
   }
   return new GoogleGenAI({
@@ -21,29 +33,74 @@ function getGenAIClient(): GoogleGenAI | null {
   });
 }
 
-function parseBody(body: unknown): Record<string, unknown> {
-  if (!body) return {};
-  if (typeof body === 'string') {
-    try {
-      return JSON.parse(body) as Record<string, unknown>;
-    } catch {
-      return {};
+function sendJson(res: VercelResponseLike, statusCode: number, data: unknown) {
+  if (typeof res.status === 'function') {
+    const chained = res.status(statusCode);
+    if (chained && typeof chained.json === 'function') {
+      chained.json(data);
+      return;
     }
   }
-  if (typeof body === 'object') {
-    return body as Record<string, unknown>;
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  }
+  res.statusCode = statusCode;
+  if (typeof res.end === 'function') {
+    res.end(JSON.stringify(data));
+  }
+}
+
+async function readRequestBody(req: VercelRequestLike): Promise<Record<string, unknown>> {
+  if (req.body) {
+    if (typeof req.body === 'string') {
+      try {
+        return JSON.parse(req.body) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }
+    if (typeof req.body === 'object') {
+      return req.body as Record<string, unknown>;
+    }
+  }
+  if (typeof req.json === 'function') {
+    try {
+      const parsed = await req.json();
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  if (typeof req.on === 'function') {
+    const raw = await new Promise<string>((resolve) => {
+      let data = '';
+      req.on!('data', (chunk: unknown) => {
+        data += String(chunk ?? '');
+      });
+      req.on!('end', () => resolve(data));
+      req.on!('error', () => resolve(''));
+    });
+    if (raw) {
+      try {
+        return JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }
   }
   return {};
 }
 
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike) {
   if (req.method && req.method !== 'POST') {
-    res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+    sendJson(res, 405, { error: 'Method Not Allowed. Use POST.' });
     return;
   }
 
   try {
-    const payload = parseBody(req.body);
+    const payload = await readRequestBody(req);
     const imageDataUrl =
       typeof payload.imageDataUrl === 'string' ? payload.imageDataUrl : '';
     const fileName =
@@ -52,13 +109,13 @@ export default async function handler(req: VercelRequestLike, res: VercelRespons
       typeof payload.sensitivity === 'number' ? payload.sensitivity : 60;
 
     if (!imageDataUrl) {
-      res.status(400).json({ error: 'Missing imageDataUrl' });
+      sendJson(res, 400, { error: 'Missing imageDataUrl' });
       return;
     }
 
     const ai = getGenAIClient();
     if (!ai) {
-      res.status(200).json({
+      sendJson(res, 200, {
         fallback: true,
         engine: 'PARASIGHT Local Morphological Classifier',
         reason:
@@ -87,88 +144,102 @@ Identify and localize all intestinal parasite structures (helminth ova/larvae or
 
 For each detected parasite structure, return its bounding box in [ymin, xmin, ymax, xmax] format scaled 0 to 1000, its classId (0 to 7), scientific species label, confidence (0.0 to 1.0), and a concise morphologicalNote describing the visible diagnostic features.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: base64Data,
-            },
+    let lastError = '';
+    for (const modelName of GEMINI_VISION_MODELS) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64Data,
+                },
+              },
+              {
+                text: promptText,
+              },
+            ],
           },
-          {
-            text: promptText,
-          },
-        ],
-      },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            stainEstimate: {
-              type: Type.STRING,
-              description: 'Estimated microscopic stain or preparation type.',
-            },
-            diagnosticSummary: {
-              type: Type.STRING,
-              description: 'Overall automated clinical annotation summary.',
-            },
-            detections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  classId: {
-                    type: Type.INTEGER,
-                    description: 'Target species class ID from 0 to 7.',
-                  },
-                  label: {
-                    type: Type.STRING,
-                    description: 'Scientific name of the detected parasite species.',
-                  },
-                  confidence: {
-                    type: Type.NUMBER,
-                    description: 'Confidence score between 0.0 and 1.0.',
-                  },
-                  ymin: {
-                    type: Type.NUMBER,
-                    description: 'Top Y coordinate scaled 0 to 1000.',
-                  },
-                  xmin: {
-                    type: Type.NUMBER,
-                    description: 'Left X coordinate scaled 0 to 1000.',
-                  },
-                  ymax: {
-                    type: Type.NUMBER,
-                    description: 'Bottom Y coordinate scaled 0 to 1000.',
-                  },
-                  xmax: {
-                    type: Type.NUMBER,
-                    description: 'Right X coordinate scaled 0 to 1000.',
-                  },
-                  morphologicalNote: {
-                    type: Type.STRING,
-                    description: 'Visible diagnostic features supporting this classification.',
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                stainEstimate: {
+                  type: Type.STRING,
+                  description: 'Estimated microscopic stain or preparation type.',
+                },
+                diagnosticSummary: {
+                  type: Type.STRING,
+                  description: 'Overall automated clinical annotation summary.',
+                },
+                detections: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      classId: {
+                        type: Type.INTEGER,
+                        description: 'Target species class ID from 0 to 7.',
+                      },
+                      label: {
+                        type: Type.STRING,
+                        description: 'Scientific name of the detected parasite species.',
+                      },
+                      confidence: {
+                        type: Type.NUMBER,
+                        description: 'Confidence score between 0.0 and 1.0.',
+                      },
+                      ymin: {
+                        type: Type.NUMBER,
+                        description: 'Top Y coordinate scaled 0 to 1000.',
+                      },
+                      xmin: {
+                        type: Type.NUMBER,
+                        description: 'Left X coordinate scaled 0 to 1000.',
+                      },
+                      ymax: {
+                        type: Type.NUMBER,
+                        description: 'Bottom Y coordinate scaled 0 to 1000.',
+                      },
+                      xmax: {
+                        type: Type.NUMBER,
+                        description: 'Right X coordinate scaled 0 to 1000.',
+                      },
+                      morphologicalNote: {
+                        type: Type.STRING,
+                        description: 'Visible diagnostic features supporting this classification.',
+                      },
+                    },
                   },
                 },
               },
             },
           },
-        },
-      },
-    });
+        });
 
-    const parsed = JSON.parse((response.text ?? '{}').trim()) as Record<string, unknown>;
-    res.status(200).json({
-      fallback: false,
-      engine: 'PARASIGHT Gemini Vision + YOLOv8 Head',
-      ...parsed,
+        const parsed = JSON.parse((response.text ?? '{}').trim()) as Record<string, unknown>;
+        sendJson(res, 200, {
+          fallback: false,
+          engine: `PARASIGHT Gemini Vision (${modelName}) + YOLOv8 Head`,
+          ...parsed,
+        });
+        return;
+      } catch (innerErr: unknown) {
+        lastError = innerErr instanceof Error ? innerErr.message : String(innerErr);
+      }
+    }
+
+    sendJson(res, 200, {
+      fallback: true,
+      engine: 'PARASIGHT Local Morphological Classifier',
+      reason: lastError || 'Vision model fallback',
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    res.status(200).json({
+    sendJson(res, 200, {
       fallback: true,
       engine: 'PARASIGHT Local Morphological Classifier',
       reason: msg,

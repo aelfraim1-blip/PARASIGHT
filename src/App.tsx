@@ -9,7 +9,6 @@ import {
   generateAutomatedDiagnosticReport,
   AutomatedDiagnosticSummary,
   ChatSlideContext,
-  botReply,
 } from './utils/parasightLogic';
 import {
   DetectionCandidate,
@@ -29,6 +28,16 @@ import {
   TUTORIAL_STEPS,
   TutorialStep,
 } from './components/InteractiveTutorial';
+import { AuthModal } from './components/AuthModal';
+import {
+  auth,
+  onAuthStateChanged,
+  signOutCurrentUser,
+  saveAnalysisSummaryToCloud,
+  deleteAnalysisSummaryFromCloud,
+  subscribeToUserCloudAnalyses,
+  type User,
+} from './firebase';
 
 export type PageId =
   | 'home'
@@ -238,13 +247,13 @@ export default function App() {
   const [chatheadOpen, setChatheadOpen] = useState<boolean>(false);
   const [chatheadExpanded, setChatheadExpanded] = useState<boolean>(false);
   const [chatThinking, setChatThinking] = useState<boolean>(false);
-  const [chatEngineLabel, setChatEngineLabel] = useState<string>('Gemini 3.8 Flash · Context-Aware AI');
+  const [chatEngineLabel, setChatEngineLabel] = useState<string>('Powered by Google Gemini AI');
   const [chatheadMessages, setChatheadMessages] = useState<
     { who: 'bot' | 'user'; text: string }[]
   >([
     {
       who: 'bot',
-      text: 'Hello! I am your PARASIGHT AI Copilot. I can analyze your active microscope slide, compare the 8 target parasite species (5 helminths & 3 protozoa), or explain Precision, Recall, F1-score, and the 70/30 YOLO workflow.',
+      text: 'Hello! I am your PARASIGHT Gemini AI Assistant. I can analyze your active microscope slide, compare the 8 target parasite species (5 helminths & 3 protozoa), or explain Precision, Recall, F1-score, and the 70/30 YOLO workflow.',
     },
   ]);
   const [chatheadInput, setChatheadInput] = useState<string>('');
@@ -252,6 +261,31 @@ export default function App() {
   const previewImgRef = useRef<HTMLImageElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chatheadEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Firebase Authentication & Cloud Sync State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [cloudSyncedCount, setCloudSyncedCount] = useState<number>(0);
+
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setIsAuthReady(true);
+    });
+    return () => unsubAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthReady || !currentUser || !currentUser.emailVerified) {
+      setCloudSyncedCount(0);
+      return;
+    }
+    const unsubCloud = subscribeToUserCloudAnalyses(currentUser, (records) => {
+      setCloudSyncedCount(records.length);
+    });
+    return () => unsubCloud();
+  }, [isAuthReady, currentUser]);
 
   useEffect(() => {
     document.body.classList.toggle('dark', settings.theme === 'dark');
@@ -666,8 +700,32 @@ export default function App() {
       ? history.map((x) => (x.id === currentResult.id ? currentResult : x))
       : [currentResult, ...history];
     persistHistory(updated);
+    if (currentUser && currentUser.emailVerified) {
+      saveAnalysisSummaryToCloud(currentUser, {
+        id: currentResult.id,
+        fileName: currentResult.name,
+        primarySpecies:
+          currentResult.diagnosticReport?.primarySpecies ||
+          currentResult.review?.label ||
+          'Pending review',
+        associatedIllness:
+          currentResult.diagnosticReport?.primaryAssociatedIllness ||
+          'No parasitic infection / illness identified',
+        candidateCount: currentResult.detections.length,
+        reviewDecision: currentResult.review?.decision || 'Pending',
+        reviewNotes: currentResult.review?.notes || '',
+      }).catch((err) => {
+        console.error('Cloud sync warning:', err);
+      });
+    }
     setSaveSessionFeedback(
-      exists ? 'Updated existing session in browser history.' : 'Session saved to this browser.'
+      exists
+        ? currentUser
+          ? 'Updated existing session in browser & cloud account.'
+          : 'Updated existing session in browser history.'
+        : currentUser
+        ? 'Session saved to browser & synced to your account.'
+        : 'Session saved to this browser.'
     );
   };
 
@@ -680,6 +738,8 @@ export default function App() {
         'model_connected',
         'screening_mode',
         'candidate_label',
+        'associated_illness',
+        'possible_symptoms',
         'confidence',
         'bbox_x',
         'bbox_y',
@@ -711,12 +771,16 @@ export default function App() {
     if (currentResult.detections.length > 0) {
       currentResult.detections.forEach((d) => {
         const b = Array.isArray(d.bbox) ? d.bbox : ['', '', '', ''];
+        const sp =
+          TARGET_PARASITES.find((p) => p.classId === (d.classId ?? 0)) || TARGET_PARASITES[0];
         rows.push([
           currentResult.name,
           currentResult.status,
           currentResult.modelConnected,
           currentResult.screeningMode,
           d.label || '',
+          sp.associatedIllness,
+          sp.commonSymptoms,
           Number.isFinite(d.confidence) ? (d.confidence as number) : '',
           ...b,
           d.yoloLine || '',
@@ -742,6 +806,8 @@ export default function App() {
         currentResult.status,
         currentResult.modelConnected,
         currentResult.screeningMode,
+        '',
+        'No parasitic infection / illness identified at current threshold',
         '',
         '',
         '',
@@ -799,6 +865,15 @@ export default function App() {
       analysisDate: currentResult.date,
       imageDimensions: currentResult.imageDimensions,
       quality: currentResult.quality,
+      clinicalConditionSummary: currentResult.diagnosticReport
+        ? {
+            primarySpecies: currentResult.diagnosticReport.primarySpecies,
+            possibleAssociatedIllness: currentResult.diagnosticReport.primaryAssociatedIllness,
+            possibleSymptoms: currentResult.diagnosticReport.primarySymptoms,
+            transmissionRoute: currentResult.diagnosticReport.primaryTransmission,
+            speciesBreakdown: currentResult.diagnosticReport.speciesBreakdown,
+          }
+        : null,
       timingComparison: {
         parasightTimeSec: currentResult.parasightTimeSec,
         manualTimeSec: currentResult.manualTimeSec,
@@ -935,14 +1010,22 @@ export default function App() {
             debrisLabel: currentResult.quality.conditions.debrisLabel,
           }
         : null,
-      detections: currentResult.detections.map((d) => ({
-        label: d.label,
-        classId: d.classId,
-        confidence: d.confidence,
-        yoloLine: d.yoloLine,
-        morphologicalNote: d.morphologicalNote,
-      })),
+      detections: currentResult.detections.map((d) => {
+        const sp =
+          TARGET_PARASITES.find((p) => p.classId === (d.classId ?? 0)) || TARGET_PARASITES[0];
+        return {
+          label: d.label,
+          classId: d.classId,
+          confidence: d.confidence,
+          yoloLine: d.yoloLine,
+          morphologicalNote: d.morphologicalNote,
+          associatedIllness: sp.associatedIllness,
+          commonSymptoms: sp.commonSymptoms,
+        };
+      }),
       diagnosticSummary: currentResult.diagnosticReport?.automatedNotes || currentResult.review?.notes,
+      associatedIllness: currentResult.diagnosticReport?.primaryAssociatedIllness,
+      commonSymptoms: currentResult.diagnosticReport?.primarySymptoms,
     };
   };
 
@@ -983,20 +1066,18 @@ export default function App() {
           imageDataUrl: includeSlideImage && currentDataUrl ? currentDataUrl : null,
         }),
       });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data && data.fallback === false && typeof data.reply === 'string' && data.reply.trim()) {
-          aiReply = data.reply.trim();
-          setChatEngineLabel(data.engine || 'Gemini 3.8 Flash · PARASIGHT AI');
-        } else {
-          aiReply = botReply(q, slideContext);
-          setChatEngineLabel(data?.engine || 'PARASIGHT Contextual AI');
-        }
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && typeof data?.reply === 'string' && data.reply.trim()) {
+        aiReply = data.reply.trim();
+        setChatEngineLabel(data.engine || 'Powered by Google Gemini AI');
       } else {
-        aiReply = botReply(q, slideContext);
+        aiReply =
+          data?.error ||
+          `Gemini API request failed (HTTP ${resp.status}). Ensure GEMINI_API_KEY is configured in your environment variables.`;
       }
-    } catch {
-      aiReply = botReply(q, slideContext);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      aiReply = `Could not reach /api/chat (${msg}). Ensure the serverless function is deployed and GEMINI_API_KEY is set.`;
     } finally {
       setChatThinking(false);
     }
@@ -1208,6 +1289,48 @@ export default function App() {
         </nav>
 
         <div className="sidefoot">
+          {currentUser ? (
+            <div style={{ marginBottom: 10 }}>
+              <b style={{ display: 'block', color: '#fff', fontSize: 12.5 }}>
+                ✓ {currentUser.displayName || currentUser.email || 'Signed-In Researcher'}
+              </b>
+              <span style={{ fontSize: 11, opacity: 0.85, display: 'block', marginTop: 2 }}>
+                {cloudSyncedCount} cloud-synced {cloudSyncedCount === 1 ? 'analysis' : 'analyses'}
+              </span>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="tinybtn"
+                  style={{ flex: 1, padding: '5px 8px', fontSize: 11 }}
+                  onClick={() => setShowAuthModal(true)}
+                >
+                  Account
+                </button>
+                <button
+                  type="button"
+                  className="tinybtn danger"
+                  style={{ flex: 1, padding: '5px 8px', fontSize: 11 }}
+                  onClick={() => signOutCurrentUser()}
+                  data-testid="sidebar-logout-btn"
+                >
+                  Log Out
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 10 }}>
+              <b style={{ display: 'block', marginBottom: 4 }}>Researcher Account</b>
+              <button
+                type="button"
+                className="primary"
+                style={{ width: '100%', padding: '7px 10px', fontSize: 11.5 }}
+                onClick={() => setShowAuthModal(true)}
+                data-testid="sidebar-login-btn"
+              >
+                👤 Sign In (Gmail / FB)
+              </button>
+            </div>
+          )}
           <b>Offline Laboratory Mode</b>
           <br />
           Runs locally in this browser.
@@ -1232,6 +1355,38 @@ export default function App() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {currentUser ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  className="tinybtn selected"
+                  onClick={() => setShowAuthModal(true)}
+                  data-testid="topbar-account-btn"
+                  title="Manage signed-in researcher account"
+                >
+                  👤 {currentUser.displayName || currentUser.email?.split('@')[0] || 'Account'}
+                </button>
+                <button
+                  type="button"
+                  className="tinybtn danger"
+                  onClick={() => signOutCurrentUser()}
+                  data-testid="topbar-logout-btn"
+                  title="Log out of your account"
+                >
+                  Log Out
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="tinybtn"
+                onClick={() => setShowAuthModal(true)}
+                data-testid="topbar-login-btn"
+                title="Sign in with Google (Gmail), Facebook, GitHub, or Email"
+              >
+                👤 Sign In / Register
+              </button>
+            )}
             <button
               type="button"
               className="tinybtn"
@@ -1441,8 +1596,14 @@ export default function App() {
                     </div>
                   </div>
 
-                  <p className="smallprint" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <p className="smallprint" style={{ marginTop: 10, marginBottom: 4 }}>
                     <b>Diagnostic Morphology:</b> {activeHeroSpecies.morphology}
+                  </p>
+                  <p className="smallprint" style={{ marginTop: 0, marginBottom: 0 }}>
+                    <b>Possible Illness:</b>{' '}
+                    <span style={{ color: '#8e1018', fontWeight: 700 }}>
+                      {activeHeroSpecies.associatedIllness}
+                    </span>
                   </p>
                 </div>
 
@@ -1622,8 +1783,14 @@ export default function App() {
                             </span>
                           </div>
                         </div>
-                        <p className="smallprint" style={{ marginTop: 8, marginBottom: 0 }}>
+                        <p className="smallprint" style={{ marginTop: 8, marginBottom: 4 }}>
                           {sp.morphology}
+                        </p>
+                        <p className="smallprint" style={{ marginTop: 0, marginBottom: 0 }}>
+                          <b>Possible Illness:</b>{' '}
+                          <span style={{ color: '#8e1018', fontWeight: 600 }}>
+                            {sp.associatedIllness}
+                          </span>
                         </p>
                       </div>
 
@@ -1997,77 +2164,153 @@ export default function App() {
                         border: '1px solid var(--line)',
                         background: 'var(--bg)',
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 16,
-                        flexWrap: 'wrap',
+                        flexDirection: 'column',
+                        gap: 14,
                       }}
                     >
-                      <div style={{ display: 'flex', gap: 14, alignItems: 'center', flex: '1 1 360px' }}>
-                        {currentResult.diagnosticReport.primaryClassId !== null && (
-                          <div style={{ flexShrink: 0 }}>
-                            <ParasiteSvgIcon
-                              classId={currentResult.diagnosticReport.primaryClassId}
-                              size={64}
-                            />
-                          </div>
-                        )}
-                        <div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <span className="eyebrow" style={{ marginBottom: 0 }}>
-                              AUTOMATED CLASSIFICATION & ANNOTATION
-                            </span>
-                            <code style={{ fontSize: 11, fontWeight: 700 }}>
-                              {currentResult.diagnosticReport.primaryClassId !== null
-                                ? `YOLO Class ${currentResult.diagnosticReport.primaryClassId} · ${currentResult.diagnosticReport.primaryGroup}`
-                                : 'No Target Detected'}
-                            </code>
-                          </div>
-                          <h3 style={{ margin: '4px 0 2px', fontSize: 17 }}>
-                            <i>{currentResult.diagnosticReport.primarySpecies}</i>
-                            {currentResult.diagnosticReport.maxConfidence !== null && (
-                              <span
-                                className="mono"
-                                style={{
-                                  marginLeft: 10,
-                                  fontSize: 13,
-                                  color: 'var(--teal)',
-                                }}
-                              >
-                                {(currentResult.diagnosticReport.maxConfidence * 100).toFixed(1)}%
-                                confidence
-                              </span>
-                            )}
-                          </h3>
-                          <p className="smallprint" style={{ margin: 0 }}>
-                            {currentResult.diagnosticReport.automatedNotes}
-                          </p>
-                        </div>
-                      </div>
-
                       <div
                         style={{
                           display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'flex-end',
-                          gap: 6,
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 16,
+                          flexWrap: 'wrap',
                         }}
                       >
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {currentResult.diagnosticReport.speciesBreakdown.map((sp) => (
-                            <span
-                              key={sp.classId}
-                              className="tinybtn selected"
-                              style={{ padding: '4px 9px', fontSize: 11, cursor: 'default' }}
-                            >
-                              Class {sp.classId}: {sp.label} ({sp.count}× ·{' '}
-                              {(sp.maxConf * 100).toFixed(1)}%)
-                            </span>
-                          ))}
+                        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flex: '1 1 360px' }}>
+                          {currentResult.diagnosticReport.primaryClassId !== null && (
+                            <div style={{ flexShrink: 0 }}>
+                              <ParasiteSvgIcon
+                                classId={currentResult.diagnosticReport.primaryClassId}
+                                size={64}
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <span className="eyebrow" style={{ marginBottom: 0 }}>
+                                AUTOMATED CLASSIFICATION & ANNOTATION
+                              </span>
+                              <code style={{ fontSize: 11, fontWeight: 700 }}>
+                                {currentResult.diagnosticReport.primaryClassId !== null
+                                  ? `YOLO Class ${currentResult.diagnosticReport.primaryClassId} · ${currentResult.diagnosticReport.primaryGroup}`
+                                  : 'No Target Detected'}
+                              </code>
+                            </div>
+                            <h3 style={{ margin: '4px 0 2px', fontSize: 17 }}>
+                              <i>{currentResult.diagnosticReport.primarySpecies}</i>
+                              {currentResult.diagnosticReport.maxConfidence !== null && (
+                                <span
+                                  className="mono"
+                                  style={{
+                                    marginLeft: 10,
+                                    fontSize: 13,
+                                    color: 'var(--teal)',
+                                  }}
+                                >
+                                  {(currentResult.diagnosticReport.maxConfidence * 100).toFixed(1)}%
+                                  confidence
+                                </span>
+                              )}
+                            </h3>
+                            <p className="smallprint" style={{ margin: 0 }}>
+                              {currentResult.diagnosticReport.automatedNotes}
+                            </p>
+                          </div>
                         </div>
-                        <span className="smallprint mono">
-                          Engine: {currentResult.engineUsed || 'PARASIGHT Automated Classifier'}
-                        </span>
+
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: 6,
+                          }}
+                        >
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            {currentResult.diagnosticReport.speciesBreakdown.map((sp) => (
+                              <span
+                                key={sp.classId}
+                                className="tinybtn selected"
+                                style={{ padding: '4px 9px', fontSize: 11, cursor: 'default' }}
+                              >
+                                Class {sp.classId}: {sp.label} ({sp.count}× ·{' '}
+                                {(sp.maxConf * 100).toFixed(1)}%)
+                              </span>
+                            ))}
+                          </div>
+                          <span className="smallprint mono">
+                            Engine: {currentResult.engineUsed || 'PARASIGHT Automated Classifier'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Possible Associated Illness / Clinical Condition & Symptoms Card */}
+                      <div
+                        data-testid="associated-illness-panel"
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: 10,
+                          border: '1px solid var(--line)',
+                          borderLeft: '4px solid #8e1018',
+                          background: 'var(--card)',
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                          gap: 12,
+                        }}
+                      >
+                        <div>
+                          <span
+                            className="eyebrow"
+                            style={{ display: 'block', marginBottom: 3, color: '#8e1018' }}
+                          >
+                            POSSIBLE ASSOCIATED ILLNESS / CLINICAL CONDITION
+                          </span>
+                          <b style={{ fontSize: 14.5, color: 'var(--navy)', display: 'block' }}>
+                            {currentResult.diagnosticReport.primaryAssociatedIllness}
+                          </b>
+                          {currentResult.diagnosticReport.primaryTransmission &&
+                            currentResult.diagnosticReport.primaryTransmission !== 'N/A' && (
+                              <span
+                                className="smallprint"
+                                style={{ display: 'block', marginTop: 4 }}
+                              >
+                                <b>Transmission Route:</b>{' '}
+                                {currentResult.diagnosticReport.primaryTransmission}
+                              </span>
+                            )}
+                        </div>
+
+                        <div>
+                          <span
+                            className="eyebrow"
+                            style={{ display: 'block', marginBottom: 3 }}
+                          >
+                            POSSIBLE SYMPTOMS & CLINICAL PRESENTATION
+                          </span>
+                          <p className="smallprint" style={{ margin: 0, lineHeight: 1.45 }}>
+                            {currentResult.diagnosticReport.primarySymptoms}
+                          </p>
+                        </div>
+
+                        {currentResult.diagnosticReport.speciesBreakdown.length > 1 && (
+                          <div
+                            style={{
+                              gridColumn: '1 / -1',
+                              paddingTop: 8,
+                              borderTop: '1px dashed var(--line)',
+                            }}
+                          >
+                            <span className="smallprint" style={{ fontWeight: 700 }}>
+                              Multi-Species Co-Infection Summary:{' '}
+                            </span>
+                            <span className="smallprint">
+                              {currentResult.diagnosticReport.speciesBreakdown
+                                .map((sp) => `${sp.label} → ${sp.associatedIllness}`)
+                                .join(' · ')}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -2102,7 +2345,7 @@ export default function App() {
                           <table>
                             <thead>
                               <tr>
-                                <th># / Classified Species & Morphology</th>
+                                <th># / Species, Possible Illness & Morphology</th>
                                 <th>Confidence</th>
                                 <th>Normalized BBox</th>
                               </tr>
@@ -2110,6 +2353,9 @@ export default function App() {
                             <tbody>
                               {currentResult.detections.map((d, idx) => {
                                 const isSel = selectedDetectionIdx === idx;
+                                const spInfo =
+                                  TARGET_PARASITES.find((p) => p.classId === (d.classId ?? 0)) ||
+                                  TARGET_PARASITES[0];
                                 return (
                                   <tr
                                     key={d.id || idx}
@@ -2130,6 +2376,16 @@ export default function App() {
                                           (Class {d.classId ?? 0})
                                         </span>
                                       </b>
+                                      <small
+                                        style={{
+                                          display: 'block',
+                                          color: '#8e1018',
+                                          fontWeight: 700,
+                                          marginTop: 2,
+                                        }}
+                                      >
+                                        Possible Illness: {spInfo.associatedIllness}
+                                      </small>
                                       {d.yoloLine && (
                                         <small className="mono">YOLO: {d.yoloLine}</small>
                                       )}
@@ -2163,6 +2419,14 @@ export default function App() {
                         </div>
                       )}
 
+                      {currentResult.diagnosticReport && (
+                        <div className="row">
+                          <span>Possible associated illness</span>
+                          <b style={{ color: '#8e1018', textAlign: 'right' }}>
+                            {currentResult.diagnosticReport.primaryAssociatedIllness}
+                          </b>
+                        </div>
+                      )}
                       <div className="row">
                         <span>Detection sensitivity</span>
                         <b className="mono">
@@ -2495,6 +2759,11 @@ export default function App() {
                               Label: {item.review?.label || 'Pending review'} · Decision:{' '}
                               {item.review?.decision || 'Pending'}
                             </small>
+                            {item.diagnosticReport?.primaryAssociatedIllness && (
+                              <small style={{ color: '#8e1018', fontWeight: 600 }}>
+                                Possible Illness: {item.diagnosticReport.primaryAssociatedIllness}
+                              </small>
+                            )}
                           </td>
                           <td className="mono">
                             {item.parasightTimeSec
@@ -2527,9 +2796,14 @@ export default function App() {
                             <button
                               type="button"
                               className="tinybtn danger"
-                              onClick={() =>
-                                persistHistory(history.filter((x) => x.id !== item.id))
-                              }
+                              onClick={() => {
+                                persistHistory(history.filter((x) => x.id !== item.id));
+                                if (currentUser && currentUser.emailVerified) {
+                                  deleteAnalysisSummaryFromCloud(currentUser, item.id).catch(
+                                    (err) => console.error('Cloud delete warning:', err)
+                                  );
+                                }
+                              }}
                             >
                               Delete
                             </button>
@@ -2631,7 +2905,12 @@ export default function App() {
                           <td>{sp.group}</td>
                           <td>{sp.stage}</td>
                           <td className="mono">{sp.sizeRangeUm}</td>
-                          <td>{sp.morphology}</td>
+                          <td>
+                            {sp.morphology}
+                            <small style={{ color: '#8e1018', fontWeight: 600, marginTop: 3 }}>
+                              Possible Illness: {sp.associatedIllness}
+                            </small>
+                          </td>
                           <td>
                             <button
                               type="button"
@@ -3847,6 +4126,13 @@ export default function App() {
           </div>
         </aside>
       )}
+
+      {/* Account Login / Logout Modal (Gmail, Facebook, GitHub, Email/Password) */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

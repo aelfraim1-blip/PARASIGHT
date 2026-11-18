@@ -3,69 +3,125 @@ import { GoogleGenAI } from '@google/genai';
 interface VercelRequestLike {
   method?: string;
   body?: unknown;
+  json?: () => Promise<unknown>;
+  on?: (event: string, listener: (chunk?: unknown) => void) => void;
 }
 
 interface VercelResponseLike {
-  status: (code: number) => VercelResponseLike;
-  json: (data: unknown) => void;
+  statusCode?: number;
+  status?: (code: number) => { json?: (data: unknown) => void };
+  json?: (data: unknown) => void;
   setHeader?: (name: string, value: string) => void;
+  end?: (chunk?: string) => void;
 }
 
-function getGenAIClient(): GoogleGenAI | null {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key || key === 'MY_GEMINI_API_KEY' || key.trim() === '') {
-    return null;
-  }
-  return new GoogleGenAI({
-    apiKey: key,
-  });
-}
+const GEMINI_CHAT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest'] as const;
 
-function parseBody(body: unknown): Record<string, unknown> {
-  if (!body) return {};
-  if (typeof body === 'string') {
-    try {
-      return JSON.parse(body) as Record<string, unknown>;
-    } catch {
-      return {};
+function sendJson(res: VercelResponseLike, statusCode: number, data: unknown) {
+  if (typeof res.status === 'function') {
+    const chained = res.status(statusCode);
+    if (chained && typeof chained.json === 'function') {
+      chained.json(data);
+      return;
     }
   }
-  if (typeof body === 'object') {
-    return body as Record<string, unknown>;
+  if (typeof res.setHeader === 'function') {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  }
+  res.statusCode = statusCode;
+  if (typeof res.end === 'function') {
+    res.end(JSON.stringify(data));
+  }
+}
+
+async function readRequestBody(req: VercelRequestLike): Promise<Record<string, unknown>> {
+  if (req.body) {
+    if (typeof req.body === 'string') {
+      try {
+        return JSON.parse(req.body) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }
+    if (typeof req.body === 'object') {
+      return req.body as Record<string, unknown>;
+    }
+  }
+  if (typeof req.json === 'function') {
+    try {
+      const parsed = await req.json();
+      if (parsed && typeof parsed === 'object') {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  if (typeof req.on === 'function') {
+    const raw = await new Promise<string>((resolve) => {
+      let data = '';
+      req.on!('data', (chunk: unknown) => {
+        data += String(chunk ?? '');
+      });
+      req.on!('end', () => resolve(data));
+      req.on!('error', () => resolve(''));
+    });
+    if (raw) {
+      try {
+        return JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }
   }
   return {};
 }
 
 export default async function handler(req: VercelRequestLike, res: VercelResponseLike) {
   if (req.method && req.method !== 'POST') {
-    res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+    sendJson(res, 405, { error: 'Method Not Allowed. Use POST.' });
     return;
   }
 
   try {
-    const payload = parseBody(req.body);
-    const message = typeof payload.message === 'string' ? payload.message : '';
+    const payload = await readRequestBody(req);
+    const message = typeof payload.message === 'string' ? payload.message.trim() : '';
     const history = Array.isArray(payload.history) ? payload.history : [];
     const slideContext = payload.slideContext ?? null;
     const imageDataUrl =
       typeof payload.imageDataUrl === 'string' ? payload.imageDataUrl : null;
 
     if (!message) {
-      res.status(400).json({ error: 'Missing message' });
+      sendJson(res, 400, { error: 'Missing message' });
       return;
     }
 
-    const ai = getGenAIClient();
-    if (!ai) {
-      res.status(200).json({
-        fallback: true,
-        engine: 'PARASIGHT Contextual Knowledge AI',
-        reason: 'No external Gemini API key configured; using contextual knowledge AI.',
+    const apiKey = (
+      process.env.GEMINI_API_KEY ||
+      process.env.VITE_GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_GENAI_API_KEY ||
+      ''
+    ).trim();
+
+    if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+      sendJson(res, 500, {
+        error:
+          'GEMINI_API_KEY is not configured on the server. On Vercel, add GEMINI_API_KEY in Project Settings → Environment Variables and redeploy.',
       });
       return;
     }
 
-    const systemInstruction = `You are the PARASIGHT AI Assistant, an expert clinical coproparasitology and computer-vision research copilot built for the study "PARASIGHT: An AI-Based Microscopic Image Analysis System For Coproparasitological Parasite Detection" (Researchers: Berdejo, Cabayao, Malaque, Tanucan, & Tayson, November 2026).
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const systemInstruction = `You are the PARASIGHT Gemini AI Assistant, an expert clinical coproparasitology and computer-vision research copilot built for the study "PARASIGHT: An AI-Based Microscopic Image Analysis System For Coproparasitological Parasite Detection" (Researchers: Berdejo, Cabayao, Malaque, Tanucan, & Tayson, November 2026).
 
 Your knowledge covers:
 1. The 8 Target Intestinal Parasites (Classes 0–7):
@@ -95,9 +151,7 @@ Guidelines:
 
     const recentHistory = history.slice(-8) as Array<{ who?: string; text?: string }>;
     const historyTranscript = recentHistory
-      .map(
-        (m) => `${m.who === 'user' ? 'User' : 'PARASIGHT AI'}: ${m.text || ''}`
-      )
+      .map((m) => `${m.who === 'user' ? 'User' : 'PARASIGHT AI'}: ${m.text || ''}`)
       .join('\n\n');
 
     const userPrompt = historyTranscript
@@ -124,35 +178,38 @@ Guidelines:
 
     parts.push({ text: userPrompt });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: { parts },
-      config: {
-        systemInstruction,
-      },
-    });
+    let lastErrorMsg = '';
+    for (const modelName of GEMINI_CHAT_MODELS) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: { parts },
+          config: {
+            systemInstruction,
+          },
+        });
 
-    const replyText = (response.text ?? '').trim();
-    if (!replyText) {
-      res.status(200).json({
-        fallback: true,
-        engine: 'PARASIGHT Contextual Knowledge AI',
-        reason: 'Empty model response',
-      });
-      return;
+        const replyText = (response.text ?? '').trim();
+        if (replyText) {
+          sendJson(res, 200, {
+            engine: `Google Gemini AI (${modelName})`,
+            reply: replyText,
+          });
+          return;
+        }
+      } catch (innerErr: unknown) {
+        lastErrorMsg =
+          innerErr instanceof Error ? innerErr.message : String(innerErr);
+      }
     }
 
-    res.status(200).json({
-      fallback: false,
-      engine: 'Gemini 3.8 Flash · PARASIGHT AI',
-      reply: replyText,
+    sendJson(res, 502, {
+      error: `Gemini API generation failed: ${lastErrorMsg || 'Empty response from Gemini model.'}`,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    res.status(200).json({
-      fallback: true,
-      engine: 'PARASIGHT Contextual Knowledge AI',
-      reason: msg,
+    sendJson(res, 500, {
+      error: `Gemini API error: ${msg}`,
     });
   }
 }

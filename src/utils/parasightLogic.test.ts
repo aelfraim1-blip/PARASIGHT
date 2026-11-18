@@ -11,7 +11,6 @@ import {
   classifyImageCondition,
   classifyCandidateMorphology,
   generateAutomatedDiagnosticReport,
-  botReply,
 } from './parasightLogic';
 
 test('TARGET_PARASITES defines all 8 species from Phase A of the Research Plan', () => {
@@ -121,34 +120,17 @@ test('classifyCandidateMorphology and generateAutomatedDiagnosticReport classify
   assert.equal(report.primarySpecies, 'Trichuris trichiura');
   assert.equal(report.primaryClassId, 1);
   assert.equal(report.automatedDecision, 'Accepted (True Positive)');
+  assert.ok(report.primaryAssociatedIllness.includes('Trichuriasis'));
+  assert.ok(report.primarySymptoms.length > 10);
+  assert.ok(report.primaryTransmission.length > 10);
   assert.ok(report.automatedNotes.includes('Trichuris trichiura'));
+  for (const sp of TARGET_PARASITES) {
+    assert.ok(sp.associatedIllness.length > 5);
+    assert.ok(sp.commonSymptoms.length > 10);
+    assert.ok(sp.transmissionRoute.length > 10);
+  }
 });
 
-test('botReply answers research-specific, species comparison, and live slideContext questions', () => {
-  const ans = botReply('What are the 8 target species in Phase A?');
-  assert.ok(ans.includes('Ascaris lumbricoides'));
-  assert.ok(ans.includes('Entamoeba coli'));
 
-  const comp = botReply('Compare Entamoeba histolytica and Entamoeba coli');
-  assert.ok(comp.includes('Entamoeba histolytica'));
-  assert.ok(comp.includes('Entamoeba coli'));
-
-  const slideAns = botReply('Explain the current slide', {
-    fileName: 'trichuris_saline_ref.png',
-    stainEstimate: 'Saline Wet Mount (400×)',
-    detections: [
-      {
-        label: 'Trichuris trichiura',
-        classId: 1,
-        confidence: 0.946,
-        yoloLine: '1 0.500000 0.500000 0.140000 0.080000',
-        morphologicalNote: 'Barrel-shaped egg with bipolar hyaline plugs.',
-      },
-    ],
-  });
-  assert.ok(slideAns.includes('trichuris_saline_ref.png'));
-  assert.ok(slideAns.includes('Trichuris trichiura'));
-  assert.ok(slideAns.includes('94.6%'));
-});
 
 

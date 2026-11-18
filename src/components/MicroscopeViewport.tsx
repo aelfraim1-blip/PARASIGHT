@@ -450,6 +450,33 @@ export const MicroscopeViewport: React.FC<MicroscopeViewportProps> = ({
                 <b>Auto-Annotated Morphology:</b> {selectedDet.morphologicalNote}
               </div>
             )}
+            {(() => {
+              const sp =
+                TARGET_PARASITES.find((p) => p.classId === (selectedDet.classId ?? 0)) ||
+                TARGET_PARASITES[0];
+              return (
+                <div
+                  className="smallprint"
+                  style={{
+                    marginTop: 6,
+                    paddingTop: 6,
+                    borderTop: '1px dashed var(--line)',
+                  }}
+                >
+                  <div>
+                    <b style={{ color: 'var(--navy)' }}>
+                      Possible Associated Illness / Clinical Condition:
+                    </b>{' '}
+                    <span style={{ fontWeight: 700, color: 'var(--teal)' }}>
+                      {sp.associatedIllness}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 2 }}>
+                    <b>Possible Symptoms:</b> {sp.commonSymptoms}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <label htmlFor="reclassifySelect" style={{ fontSize: 12, fontWeight: 700 }}>

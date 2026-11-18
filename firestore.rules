@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // 2. Validation Blueprint: UserPublicProfile
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'providerId', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'providerId', 'role', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.uid == request.auth.uid
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && data.providerId is string
+        && data.providerId.size() >= 1
+        && data.providerId.size() <= 40
+        && data.role is string
+        && data.role.size() <= 20
+        && data.role == 'researcher'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // 3. Validation Blueprint: AnalysisRecord
+    function isValidAnalysisRecord(data) {
+      return data.keys().hasAll([
+          'ownerId',
+          'fileName',
+          'primarySpecies',
+          'associatedIllness',
+          'candidateCount',
+          'reviewDecision',
+          'reviewNotes',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId',
+          'fileName',
+          'primarySpecies',
+          'associatedIllness',
+          'candidateCount',
+          'reviewDecision',
+          'reviewNotes',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.ownerId is string
+        && data.ownerId.size() >= 1
+        && data.ownerId.size() <= 128
+        && data.ownerId.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.ownerId == request.auth.uid
+        && data.fileName is string
+        && data.fileName.size() >= 1
+        && data.fileName.size() <= 160
+        && data.primarySpecies is string
+        && data.primarySpecies.size() >= 1
+        && data.primarySpecies.size() <= 120
+        && data.associatedIllness is string
+        && data.associatedIllness.size() >= 1
+        && data.associatedIllness.size() <= 240
+        && data.candidateCount is int
+        && data.candidateCount >= 0
+        && data.candidateCount <= 500
+        && data.reviewDecision is string
+        && data.reviewDecision.size() >= 1
+        && data.reviewDecision.size() <= 80
+        && data.reviewNotes is string
+        && data.reviewNotes.size() <= 1500
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Collection: /users/{userId}
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isOwner(userId)
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isOwner(userId)
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().role == existing().role
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'providerId', 'updatedAt'])
+        );
+
+      allow delete: if isVerifiedUser() && isOwner(userId) && isValidId(userId);
+
+      // Subcollection: /users/{userId}/analyses/{analysisId}
+      match /analyses/{analysisId} {
+        // Master Gate: verify parent user profile exists and belongs to request.auth.uid
+        function hasValidParentProfile() {
+          return exists(/databases/$(database)/documents/users/$(userId))
+            && get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid;
+        }
+
+        allow get: if isOwner(userId)
+          && isValidId(userId)
+          && isValidId(analysisId)
+          && existing().ownerId == request.auth.uid
+          && hasValidParentProfile();
+
+        // Secure List Query Enforcer (no get()/exists() inside list to prevent O(n) read explosion)
+        allow list: if isOwner(userId)
+          && existing().ownerId == request.auth.uid;
+
+        allow create: if isVerifiedUser()
+          && isOwner(userId)
+          && isValidId(userId)
+          && isValidId(analysisId)
+          && isValidAnalysisRecord(incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && hasValidParentProfile();
+
+        allow update: if isVerifiedUser()
+          && isOwner(userId)
+          && isValidId(userId)
+          && isValidId(analysisId)
+          && isValidAnalysisRecord(incoming())
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'primarySpecies',
+              'associatedIllness',
+              'candidateCount',
+              'reviewDecision',
+              'reviewNotes',
+              'updatedAt'
+            ])
+          )
+          && hasValidParentProfile();
+
+        allow delete: if isVerifiedUser()
+          && isOwner(userId)
+          && isValidId(userId)
+          && isValidId(analysisId)
+          && existing().ownerId == request.auth.uid
+          && hasValidParentProfile();
+      }
+    }
+  }
+}
